@@ -51,24 +51,34 @@ jobs:
           install: >-
             wget
 
+      # Los mirrors de pacman a veces se quedan lentos o caen en medio de
+      # una descarga (visto en la practica: "Operation too slow" contra
+      # ftp2.osuosl.org). Reintentamos unas cuantas veces antes de rendirnos.
       - name: Install Windows dependencies
         shell: msys2 {0}
         run: |
-          pacman -Syu --noconfirm \
-            git \
-            mingw-w64-ucrt-x86_64-cmake \
-            mingw-w64-ucrt-x86_64-cppwinrt \
-            mingw-w64-ucrt-x86_64-curl-winssl \
-            mingw-w64-ucrt-x86_64-gcc \
-            mingw-w64-ucrt-x86_64-graphviz \
-            mingw-w64-ucrt-x86_64-MinHook \
-            mingw-w64-ucrt-x86_64-miniupnpc \
-            mingw-w64-ucrt-x86_64-nlohmann-json \
-            mingw-w64-ucrt-x86_64-nsis \
-            mingw-w64-ucrt-x86_64-onevpl \
-            mingw-w64-ucrt-x86_64-openssl \
-            mingw-w64-ucrt-x86_64-opus \
-            mingw-w64-ucrt-x86_64-toolchain
+          for attempt in 1 2 3; do
+            if pacman -Syu --noconfirm \
+              git \
+              mingw-w64-ucrt-x86_64-cmake \
+              mingw-w64-ucrt-x86_64-cppwinrt \
+              mingw-w64-ucrt-x86_64-curl-winssl \
+              mingw-w64-ucrt-x86_64-gcc \
+              mingw-w64-ucrt-x86_64-graphviz \
+              mingw-w64-ucrt-x86_64-MinHook \
+              mingw-w64-ucrt-x86_64-miniupnpc \
+              mingw-w64-ucrt-x86_64-nlohmann-json \
+              mingw-w64-ucrt-x86_64-nsis \
+              mingw-w64-ucrt-x86_64-onevpl \
+              mingw-w64-ucrt-x86_64-openssl \
+              mingw-w64-ucrt-x86_64-opus \
+              mingw-w64-ucrt-x86_64-toolchain; then
+              exit 0
+            fi
+            echo "pacman fallo (intento $attempt/3), reintentando en 15s..."
+            sleep 15
+          done
+          exit 1
 
       # docs/building.md avisa de que el nodejs empaquetado por MSYS2
       # tiene un bug conocido (crash std::bad_weak_ptr). El ci-windows.yml
