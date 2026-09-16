@@ -478,6 +478,7 @@ namespace config {
       (int) amd::quality_av1_e::balanced,  // quality (av1)
       0,  // preanalysis
       1,  // vbaq
+      {},  // high_motion_quality_boost (unset = encoder default, no prior behavior to preserve)
       (int) amd::coder_e::_auto,  // coder
     },  // amd
 
@@ -1168,6 +1169,7 @@ namespace config {
 
     bool_f(vars, "amd_preanalysis", (bool &) video.amd.amd_preanalysis);
     bool_f(vars, "amd_vbaq", (bool &) video.amd.amd_vbaq);
+    bool_f(vars, "amd_high_motion_quality_boost", (bool &) video.amd.amd_high_motion_quality_boost);
     bool_f(vars, "amd_enforce_hrd", (bool &) video.amd.amd_enforce_hrd);
 
     int_f(vars, "vt_coder", video.vt.vt_coder, vt::coder_from_view);

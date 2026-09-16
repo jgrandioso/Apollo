@@ -100,6 +100,14 @@ const config = ref(props.config)
                       default="true"
             ></Checkbox>
 
+            <!-- AMD High Motion Quality Boost -->
+            <Checkbox class="mb-3"
+                      id="amd_high_motion_quality_boost"
+                      locale-prefix="config"
+                      v-model="config.amd_high_motion_quality_boost"
+                      default="false"
+            ></Checkbox>
+
             <!-- AMF Coder (H264) -->
             <div class="mb-3">
               <label for="amd_coder" class="form-label">{{ $t('config.amd_coder') }}</label>
