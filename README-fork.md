@@ -98,15 +98,19 @@ master                        <- fixes de build de Linux, base de todos los dem�
 
 - **Remoto de trabajo** (`origin`): repo bare local en
   `/srv/apollo-fork/repo.git` (mismo patrón que el proyecto portfolio —
-  sin depender de GitHub para nada). Clonar desde otro PC de la red/VPN:
-  `git clone jorge@10.7.0.1:/srv/apollo-fork/repo.git`.
+  sin depender de GitHub para nada). Clonar desde otro PC de la
+  red/VPN: `git clone <usuario>@<host-vpn>:/srv/apollo-fork/repo.git`
+  (usuario y host son los tuyos, no se publican aquí).
 - **`upstream`**: `https://github.com/ClassicOldSong/Apollo.git`, para
   traer cambios del original.
-- **`github.com/jgrandioso/Apollo`**: existe como fork real, pero se deja
-  **vacío a propósito** (solo el mirror automático de la creación) hasta
-  hacer el merge local de las features validadas. Debe mantenerse
-  **público** — un intento de ponerlo en privado justo tras crearlo lo
-  dejó bloqueado ("repository is disabled") hasta revertirlo.
+- **`github.com/jgrandioso/Apollo`**: fork real, **público** (un intento
+  de ponerlo en privado justo tras crearlo lo dejó bloqueado —
+  "repository is disabled" — hasta revertirlo). Aloja las 6 branches
+  (`master` + las 5 de feature) únicamente para poder compilarlas vía
+  GitHub Actions (`.github/workflows/build-windows.yml`) sin instalar
+  ningún toolchain en local — ver la sección de CI más abajo. El merge
+  local a un `master` limpio sigue pendiente hasta validar cada feature
+  en Windows real.
 
 ## Documentación de desarrollo
 
