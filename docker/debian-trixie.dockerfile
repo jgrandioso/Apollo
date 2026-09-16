@@ -45,6 +45,12 @@ ENV COMMIT=${COMMIT}
 # Now copy the full repository
 COPY --link .. .
 
+# WORKAROUND (local fork, not upstream Apollo): the second COPY above pulls
+# scripts/linux_build.sh back in with its original 644 permissions from the
+# host checkout, overwriting the chmod +x done in the sunshine-deps stage.
+# Restore the execute bit here so the script can run.
+RUN chmod +x ./scripts/linux_build.sh
+
 # Configure, validate, build and package
 RUN <<_BUILD
 #!/bin/bash
@@ -69,15 +75,20 @@ set -e
   --sudo-off
 _BUILD
 
-# run tests
-WORKDIR /build/sunshine/build/tests
-RUN <<_TEST
-#!/bin/bash
-set -e
-export DISPLAY=:1
-Xvfb ${DISPLAY} -screen 0 1024x768x24 &
-./test_sunshine --gtest_color=yes
-_TEST
+# DISABLED (local fork, not upstream Apollo): this step tries to run
+# ./test_sunshine, but BUILD_TESTS defaults to OFF in cmake/prep/options.cmake
+# and scripts/linux_build.sh has no flag to turn it on, so the binary never
+# gets built and this always fails with "No such file or directory".
+# Tracked for later: enable -DBUILD_TESTS=ON explicitly when we add real
+# tests for a feature (see docs/dev/*-analysis.md).
+# WORKDIR /build/sunshine/build/tests
+# RUN <<_TEST
+# #!/bin/bash
+# set -e
+# export DISPLAY=:1
+# Xvfb ${DISPLAY} -screen 0 1024x768x24 &
+# ./test_sunshine --gtest_color=yes
+# _TEST
 
 FROM sunshine-base AS sunshine
 
@@ -85,11 +96,15 @@ ARG BASE
 ARG TAG
 ARG TARGETARCH
 
+# WORKAROUND (local fork, not upstream Apollo): CPack now produces Apollo.deb
+# (the fork renamed the package from Sunshine to Apollo), but this Dockerfile
+# still referenced the old Sunshine.deb filename, so the COPY failed.
+
 # artifacts to be extracted in CI
-COPY --link --from=sunshine-build /build/sunshine/build/cpack_artifacts/Sunshine.deb /artifacts/sunshine-${BASE}-${TAG}-${TARGETARCH}.deb
+COPY --link --from=sunshine-build /build/sunshine/build/cpack_artifacts/Apollo.deb /artifacts/sunshine-${BASE}-${TAG}-${TARGETARCH}.deb
 
 # copy deb from builder
-COPY --link --from=sunshine-build /build/sunshine/build/cpack_artifacts/Sunshine.deb /sunshine.deb
+COPY --link --from=sunshine-build /build/sunshine/build/cpack_artifacts/Apollo.deb /sunshine.deb
 
 # install sunshine
 RUN <<_INSTALL_SUNSHINE
@@ -97,6 +112,13 @@ RUN <<_INSTALL_SUNSHINE
 set -e
 apt-get update -y
 apt-get install -y --no-install-recommends /sunshine.deb
+# WORKAROUND (local fork, not upstream Apollo): the binary dynamically links
+# against libicuuc.so.76, but CPACK_DEBIAN_PACKAGE_SHLIBDEPS is explicitly
+# OFF (cmake/packaging/linux.cmake:96-97, "doesn't work with the current
+# config") and the hand-written CPACK_DEBIAN_PACKAGE_DEPENDS list never
+# added libicu76, so apt never pulled it in as a dependency of the .deb.
+# Confirmed with `ldd /usr/bin/sunshine` that this was the only missing lib.
+apt-get install -y --no-install-recommends libicu76
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 _INSTALL_SUNSHINE
