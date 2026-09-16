@@ -91,4 +91,24 @@ ejecutar (necesita GPU NVIDIA real). Detalle: `docs/dev/adaptive-bitrate.md`.
 - Investigación de por qué esto no se pudo hacer también para AMD en la
   misma feature (ffmpeg fija el bitrate del encoder AMF solo al
   inicializar, nunca por frame) y plan a futuro si se retoma:
-  `docs/dev/amd-amf-adaptive-bitrate-future-plan.md`.
+  `docs/dev/amd-amf-adaptive-bitrate-future-plan.md`. Actualización
+  posterior: confirmado con la cabecera oficial de AMD que el bitrate
+  **sí es una propiedad dinámica de verdad** — técnicamente más simple
+  que el mecanismo de NVIDIA. Pospuesto de todas formas: requeriría un
+  fork aparte de `LizardByte/build-deps` con su propio pipeline (aunque
+  el build en sí correría gratis en GitHub Actions, no en este servidor).
+
+## `feature/amd-high-motion-quality-boost`
+
+### Añadido
+- `amd_high_motion_quality_boost` (Web UI: pestaña "AMD AMF Encoder") —
+  mejora la calidad percibida en movimiento rápido (paneos de cámara,
+  acción rápida) para los tres codecs AMF (H.264, HEVC, AV1). No
+  necesitó tocar ffmpeg — la opción (`high_motion_quality_boost_enable`)
+  ya existía en el wrapper de ffmpeg que Apollo ya usa, solo no estaba
+  expuesta en Apollo. Sin valor por defecto forzado.
+
+**Estado**: solo la parte multiplataforma (`config.h`/`config.cpp`) se
+pudo compilar aquí — el mapeo real en `src/video.cpp` está dentro de un
+`#ifdef _WIN32` (igual que HIDMaestro), sin compilar ni probar en este
+entorno. Detalle: `docs/dev/amd-high-motion-quality-boost.md`.

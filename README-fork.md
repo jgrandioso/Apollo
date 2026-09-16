@@ -23,6 +23,10 @@ Cuatro cosas que quería y que Apollo/Sunshine no ofrecían:
    de la red durante el stream, no solo el "Warp Mode" que ya trae Apollo
    (que solo corrige una vez, al arrancar, por descuadre de framerate).
 
+Más una quinta, añadida sobre la marcha al investigar la anterior para
+AMD: **mejora de calidad en movimiento rápido para AMD (AMF)**, una
+opción que ffmpeg ya soportaba pero Apollo no exponía.
+
 ## Estado de cada feature
 
 | Feature | Branch | Estado |
@@ -31,10 +35,16 @@ Cuatro cosas que quería y que Apollo/Sunshine no ofrecían:
 | Presupuesto de datos | `feature/bandwidth-budget` | ❌ Descartado — limitación real de protocolo, ver el análisis |
 | HIDMaestro | `feature/hidmaestro-backend` | ⚠️ Experimental — Windows-only, no compilable en este entorno de desarrollo, rumble de gatillos sin confirmar |
 | Bitrate adaptativo | `feature/adaptive-bitrate` | ✅ Compilado (solo NVENC), algoritmo validado de forma aislada, reconfiguración real sin probar (necesita GPU) |
+| Calidad en movimiento (AMD) | `feature/amd-high-motion-quality-boost` | ⚠️ Solo la parte multiplataforma compilada — el mapeo real está en código Windows-only sin compilar aquí |
 
-Ninguna de las cuatro está fusionada en `master` todavía. Cada branch
-parte del mismo commit base (`db2e4199`, que ya incluye las correcciones
-al pipeline de build de Linux — ver más abajo).
+Ninguna está fusionada en `master` todavía. Cada branch parte del mismo
+commit base (`db2e4199`, que ya incluye las correcciones al pipeline de
+build de Linux — ver más abajo).
+
+**Pospuesto, sin branch**: bitrate adaptativo real para AMD (parcheando
+ffmpeg) — confirmado técnicamente viable, pero es un proyecto aparte con
+su propio repo (`LizardByte/build-deps`). Ver
+`docs/dev/amd-amf-adaptive-bitrate-future-plan.md`.
 
 Detalle completo de cada una, incluyendo qué se investigó, qué se
 descartó y por qué, y qué queda pendiente de validar: `docs/dev/`.
@@ -80,8 +90,23 @@ master                        <- fixes de build de Linux, base de todos los dem�
 ├── feature/frame-pacing
 ├── feature/bandwidth-budget  <- solo documentación, sin código
 ├── feature/hidmaestro-backend
-└── feature/adaptive-bitrate
+├── feature/adaptive-bitrate
+└── feature/amd-high-motion-quality-boost
 ```
+
+## Dónde vive el código
+
+- **Remoto de trabajo** (`origin`): repo bare local en
+  `/srv/apollo-fork/repo.git` (mismo patrón que el proyecto portfolio —
+  sin depender de GitHub para nada). Clonar desde otro PC de la red/VPN:
+  `git clone jorge@10.7.0.1:/srv/apollo-fork/repo.git`.
+- **`upstream`**: `https://github.com/ClassicOldSong/Apollo.git`, para
+  traer cambios del original.
+- **`github.com/jgrandioso/Apollo`**: existe como fork real, pero se deja
+  **vacío a propósito** (solo el mirror automático de la creación) hasta
+  hacer el merge local de las features validadas. Debe mantenerse
+  **público** — un intento de ponerlo en privado justo tras crearlo lo
+  dejó bloqueado ("repository is disabled") hasta revertirlo.
 
 ## Documentación de desarrollo
 
