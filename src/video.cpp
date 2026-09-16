@@ -325,11 +325,15 @@ namespace video {
     avcodec_encode_session_t(avcodec_encode_session_t &&other) noexcept = default;
 
     ~avcodec_encode_session_t() {
-      // Flush any remaining frames in the encoder
-      if (avcodec_send_frame(avcodec_ctx.get(), nullptr) == 0) {
-        packet_raw_avcodec pkt;
-        while (avcodec_receive_packet(avcodec_ctx.get(), pkt.av_packet) == 0);
-      }
+      // NOTE: no longer flushing the encoder here (used to call avcodec_send_frame(ctx, nullptr)
+      // then drain via avcodec_receive_packet in a loop, discarding every packet unused).
+      // third-party/build-deps is pinned to a pre-FFmpeg-8.0 commit (a9a7f863, stale since the
+      // merge in 10fd290b) while this drain assumed FFmpeg 8.0 behavior. On that older FFmpeg,
+      // the AMD AMF backend's avcodec_send_frame(ctx, nullptr) never returns, hanging the
+      // session teardown forever (NVENC returns immediately, which is why this went unnoticed).
+      // Upstream tracking: https://github.com/ClassicOldSong/Apollo/issues/1588
+      // The session is destroyed right after anyway, so skipping the flush has no observable
+      // effect - the drained packets were discarded unused.
 
       // Order matters here because the context relies on the hwdevice still being valid
       avcodec_ctx.reset();
