@@ -1,0 +1,144 @@
+name: Build Windows (fork)
+
+# Disparo manual desde la pestaña "Actions" de GitHub, eligiendo la rama
+# a compilar en el desplegable "Use workflow from". Adaptado del
+# ci-windows.yml original de Apollo (borrado en da5a4e3e, recuperado del
+# historial de git) para poder lanzarse suelto, sin el workflow padre
+# (ci.yml) del que dependía originalmente.
+on:
+  workflow_dispatch:
+    inputs:
+      build_label:
+        description: 'Etiqueta para el build (aparece en el nombre del instalador)'
+        required: false
+        default: 'fork'
+
+permissions:
+  contents: read
+
+jobs:
+  build_windows:
+    name: Windows-AMD64
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      MSYSTEM: ucrt64
+      TOOLCHAIN: ucrt-x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # github.ref_name puede traer barras (p.ej. "feature/frame-pacing"),
+      # y las usamos luego para nombrar ficheros/artifacts, donde una barra
+      # se interpretaria como separador de directorio. La saneamos una vez.
+      - name: Compute safe branch label
+        shell: bash
+        run: |
+          safe_ref="$(echo '${{ github.ref_name }}' | tr '/' '-')"
+          echo "SAFE_REF=${safe_ref}" >> "$GITHUB_ENV"
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ucrt64
+          update: true
+          path-type: inherit
+          install: >-
+            wget
+
+      - name: Install Windows dependencies
+        shell: msys2 {0}
+        run: |
+          pacman -Syu --noconfirm \
+            git \
+            mingw-w64-ucrt-x86_64-cmake \
+            mingw-w64-ucrt-x86_64-cppwinrt \
+            mingw-w64-ucrt-x86_64-curl-winssl \
+            mingw-w64-ucrt-x86_64-gcc \
+            mingw-w64-ucrt-x86_64-graphviz \
+            mingw-w64-ucrt-x86_64-MinHook \
+            mingw-w64-ucrt-x86_64-miniupnpc \
+            mingw-w64-ucrt-x86_64-nlohmann-json \
+            mingw-w64-ucrt-x86_64-nsis \
+            mingw-w64-ucrt-x86_64-onevpl \
+            mingw-w64-ucrt-x86_64-openssl \
+            mingw-w64-ucrt-x86_64-opus \
+            mingw-w64-ucrt-x86_64-toolchain
+
+      # docs/building.md avisa de que el nodejs empaquetado por MSYS2
+      # tiene un bug conocido (crash std::bad_weak_ptr). El ci-windows.yml
+      # original usaba el de MSYS2 porque es mas simple de instalar dentro
+      # del mismo shell, pero preferimos seguir el aviso vigente de la
+      # propia documentacion del proyecto.
+      - name: Setup official Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Doxygen
+        env:
+          DOXYGEN_VERSION: "1.11.0"
+        shell: pwsh
+        run: |
+          $doxy_ver = $env:DOXYGEN_VERSION
+          $_doxy_ver = $doxy_ver.Replace(".", "_")
+
+          Invoke-WebRequest -Uri `
+            "https://github.com/doxygen/doxygen/releases/download/Release_${_doxy_ver}/doxygen-${doxy_ver}-setup.exe" `
+            -OutFile "doxygen-setup.exe"
+
+          Start-Process `
+            -FilePath .\doxygen-setup.exe `
+            -ArgumentList `
+              '/VERYSILENT' `
+            -Wait `
+            -NoNewWindow
+
+          Remove-Item -Path doxygen-setup.exe
+
+      - name: Setup python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build Windows
+        shell: msys2 {0}
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          mkdir -p build
+          cmake \
+            -B build \
+            -G Ninja \
+            -S . \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSUNSHINE_ASSETS_DIR=assets \
+            -DSUNSHINE_PUBLISHER_NAME='${{ github.repository_owner }}' \
+            -DSUNSHINE_PUBLISHER_WEBSITE='https://github.com/${{ github.repository }}' \
+            -DSUNSHINE_PUBLISHER_ISSUE_URL='https://github.com/${{ github.repository }}/issues'
+          ninja -C build
+
+      - name: Package Windows
+        shell: msys2 {0}
+        run: |
+          mkdir -p artifacts
+          cd build
+
+          cpack -G NSIS
+          cpack -G ZIP
+
+          mv ./cpack_artifacts/Sunshine.exe "../artifacts/Apollo-${SAFE_REF}-${{ inputs.build_label }}-installer.exe"
+          mv ./cpack_artifacts/Sunshine.zip "../artifacts/Apollo-${SAFE_REF}-${{ inputs.build_label }}-portable.zip"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows-${{ env.SAFE_REF }}
+          path: artifacts/
+          if-no-files-found: error
