@@ -72,6 +72,29 @@ desarrollo Linux** — necesitaría el host Windows real con una GPU AMD.
    diseño, tu aprobación, implementación, documentación — igual que con
    las cuatro features de hoy.
 
+## Actualización (2026-09-16): confirmado técnicamente, pospuesto por recursos
+
+- **Confirmado con la cabecera oficial de AMD**
+  (`amf/public/include/components/VideoEncoderVCE.h`, sección
+  `// Dynamic properties - can be set at any time`): `TARGET_BITRATE` y
+  `PEAK_BITRATE` sí son propiedades dinámicas de verdad — más simple
+  incluso que el mecanismo de NVIDIA (no hace falta una llamada de
+  "reconfigure" especial). La vía (1) del análisis original (parchear
+  ffmpeg) es técnicamente viable.
+- **Por qué se pospone**: el pipeline de `LizardByte/build-deps` compila
+  el ffmpeg de Windows en un **runner de Windows real de GitHub Actions**
+  (`windows-2022`), no por cross-compilación desde Linux — confirmado
+  revisando su `.github/workflows/ci.yml`. El build en sí no consumiría
+  disco de este servidor si se hace vía GitHub Actions (el plan gratuito
+  incluye runners Windows), pero sigue siendo un proyecto aparte con su
+  propio repo, su propio pipeline y su propio tiempo de configuración —
+  no encaja ahora mismo con el margen de disco ni el tiempo disponible.
+- **Para cuando se retome**: no haría falta montar nada de esto en este
+  servidor — fork de `build-deps`, el parche, y dejar que la CI de GitHub
+  (gratuita) compile los `.a` de Windows. Solo haría falta descargar el
+  artefacto final (pequeño, ~46MB a juzgar por el tamaño actual de
+  `third-party/build-deps/dist/Windows-AMD64`) y apuntar Apollo a él.
+
 ## Aviso
 
 Esto no está priorizado ni comprometido a ningún plazo — es solo el
