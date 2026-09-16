@@ -309,6 +309,53 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### input_backend
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Which library Apollo uses to create virtual gamepads, on Windows.
+            <code>vigem</code> is the standard choice, using ViGEmBus like
+            upstream Sunshine. <code>hidmaestro</code> uses
+            [HIDMaestro](https://github.com/hifihedgehog/HIDMaestro) instead,
+            emulating an Xbox Series X|S controller with trigger rumble
+            (impulse triggers) support, which ViGEmBus's Xbox 360 emulation
+            structurally cannot provide.
+            @attention{The <code>hidmaestro</code> backend requires
+            <code>tools/hidmaestro-bridge.exe</code> to be present (only
+            built when Apollo is compiled with
+            <code>-DSUNSHINE_ENABLE_HIDMAESTRO=ON</code>) and .NET 10 to be
+            installed on the host. If the bridge can't start, gamepad
+            support is unavailable for that session - see
+            docs/dev/hidmaestro-backend.md for setup and current
+            limitations, most of which are unverified pending a real
+            Windows test.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            vigem
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            input_backend = hidmaestro
+            @endcode</td>
+    </tr>
+    <tr>
+        <td rowspan="2">Choices</td>
+        <td>vigem</td>
+        <td>Standard ViGEmBus-based gamepad emulation (default)</td>
+    </tr>
+    <tr>
+        <td>hidmaestro</td>
+        <td>HIDMaestro-based Xbox Series X|S emulation with trigger rumble</td>
+    </tr>
+</table>
+
 ### gamepad
 
 <table>

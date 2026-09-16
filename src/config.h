@@ -199,6 +199,7 @@ namespace config {
     std::chrono::duration<double> key_repeat_period;
 
     std::string gamepad;
+    std::string input_backend;  ///< Which gamepad backend library to use. "vigem" (default) or "hidmaestro" (Windows only). Independent of `gamepad`, which selects the emulated controller *type* within whichever backend is active.
     bool ds4_back_as_touchpad_click;
     bool motion_as_ds4;
     bool touchpad_as_ds4;
