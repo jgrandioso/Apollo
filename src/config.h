@@ -146,6 +146,9 @@ namespace config {
     int max_bitrate;  // Maximum bitrate, sets ceiling in kbps for bitrate requested from client
     double minimum_fps_target;  ///< Lowest framerate that will be used when streaming. Range 0-1000, 0 = half of client's requested framerate.
 
+    double frame_pacing_tolerance_pct;  ///< Percent of the ideal encode interval used as the frame-timestamp snapping tolerance. Range 5-100, default 25 (matches the previous hardcoded 1/4 behavior).
+    bool frame_pacing_smooth_bursts;  ///< When enabled, spreads network transmission of frames that finish early across more of the ideal frame interval instead of always sending at the flat bandwidth ceiling.
+
     std::string fallback_mode;
     bool isolated_virtual_display_option;
     bool ignore_encoder_probe_failure;

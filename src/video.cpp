@@ -1944,10 +1944,16 @@ namespace video {
     double minimum_fps_target = (config::video.minimum_fps_target > 0.0) ? config::video.minimum_fps_target * 1000 : std::max(config.encodingFramerate / 5, 10000);
     auto max_frametime = std::chrono::nanoseconds(1000ms) * 1000 / minimum_fps_target;
     auto encode_frame_threshold = std::chrono::nanoseconds(1000ms) * 1000 / config.encodingFramerate;
-    auto frame_variation_threshold = encode_frame_threshold / 4;
+    // frame_pacing_tolerance_pct defaults to 25.0, which reproduces the previous hardcoded "/ 4" behavior exactly.
+    auto frame_variation_threshold = std::chrono::duration_cast<std::chrono::nanoseconds>(encode_frame_threshold * (config::video.frame_pacing_tolerance_pct / 100.0));
     auto min_frame_diff = encode_frame_threshold - frame_variation_threshold;
     BOOST_LOG(info) << "Minimum FPS target set to ~"sv << (minimum_fps_target / 2000) << "fps ("sv << max_frametime * 2 << ")"sv;
     BOOST_LOG(info) << "Encoding Frame threshold: "sv << encode_frame_threshold;
+
+    // Diagnostic-only: logs how far each incoming frame's real timing deviates from the
+    // ideal encode cadence above. Not a user-facing feature, only visible at debug/verbose
+    // log levels. Useful context when tuning frame_pacing_tolerance_pct or diagnosing jitter.
+    logging::min_max_avg_periodic_logger<double> capture_jitter_logger(debug, "Frame pacing: capture->encode jitter", "ms");
 
     auto shutdown_event = mail->event<bool>(mail::shutdown);
     auto packets = mail::man->queue<packet_t>(mail::video_packets);
@@ -2031,6 +2037,11 @@ namespace video {
 
           auto current_timestamp = *frame_timestamp;
           auto time_diff = current_timestamp - encode_frame_timestamp;
+
+          // How far this frame's actual arrival deviates from the ideal encode cadence,
+          // in milliseconds. Positive = arrived later than ideal, negative = earlier.
+          auto jitter_ms = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(time_diff - encode_frame_threshold);
+          capture_jitter_logger.collect_and_log(jitter_ms.count());
 
           // If new frame comes in way too fast, just drop
           if (time_diff < -frame_variation_threshold) {

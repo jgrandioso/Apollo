@@ -513,6 +513,9 @@ namespace config {
     0,  // max_bitrate
     0,  // minimum_fps_target (0 = framerate)
 
+    25.0,  // frame_pacing_tolerance_pct (matches previous hardcoded 1/4)
+    false,  // frame_pacing_smooth_bursts
+
     "1920x1080x60",  // fallback_mode
     false, // isolated Display
     false, // ignore_encoder_probe_failure
@@ -1205,6 +1208,9 @@ namespace config {
 
     int_f(vars, "max_bitrate", video.max_bitrate);
     double_between_f(vars, "minimum_fps_target", video.minimum_fps_target, {0.0, 1000.0});
+
+    double_between_f(vars, "frame_pacing_tolerance_pct", video.frame_pacing_tolerance_pct, {5.0, 100.0});
+    bool_f(vars, "frame_pacing_smooth_bursts", video.frame_pacing_smooth_bursts);
 
     string_f(vars, "fallback_mode", video.fallback_mode);
     bool_f(vars, "isolated_virtual_display_option", video.isolated_virtual_display_option);
