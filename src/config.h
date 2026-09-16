@@ -146,6 +146,9 @@ namespace config {
     int max_bitrate;  // Maximum bitrate, sets ceiling in kbps for bitrate requested from client
     double minimum_fps_target;  ///< Lowest framerate that will be used when streaming. Range 0-1000, 0 = half of client's requested framerate.
 
+    bool adaptive_bitrate;  ///< Apollo extension: react to client-reported packet loss by scaling the encoder bitrate down (NVENC only). Default off, zero behavior change.
+    int adaptive_bitrate_floor_pct;  ///< Never scale the (Warp Mode-adjusted) bitrate below this percent of its original value. Range 10-100.
+
     std::string fallback_mode;
     bool isolated_virtual_display_option;
     bool ignore_encoder_probe_failure;

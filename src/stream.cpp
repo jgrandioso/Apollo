@@ -4,8 +4,12 @@
  */
 
 // standard includes
+#include <algorithm>
+#include <cmath>
+#include <deque>
 #include <fstream>
 #include <future>
+#include <numeric>
 #include <queue>
 
 // lib includes
@@ -376,6 +380,14 @@ namespace stream {
       safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
 
       std::unique_ptr<platf::deinit_t> qos;
+
+      // Adaptive bitrate (Apollo extension): rolling state for the IDX_LOSS_STATS
+      // handler below. See docs/dev/adaptive-bitrate-analysis.md.
+      struct {
+        std::deque<double> loss_rate_samples;  ///< Recent "lost packets per second" values, oldest first.
+        double applied_scale = 1.0;  ///< Last multiplier actually sent via mail::bitrate_scale.
+        std::chrono::steady_clock::time_point last_reconfigure_time;
+      } adaptive_bitrate;
     } video;
 
     struct {
@@ -927,6 +939,49 @@ namespace stream {
     return 0;
   }
 
+  // Adaptive bitrate (Apollo extension, see docs/dev/adaptive-bitrate-analysis.md).
+  // Turns a rolling window of recently reported loss rates (lost packets/sec, from
+  // IDX_LOSS_STATS below) into a bitrate multiplier in [floor_scale, 1.0].
+  //
+  // Two components combine into one "badness" score:
+  //   - severity: how bad loss currently is on average across the window.
+  //   - instability: how much loss is swinging around report to report - our
+  //     approximation of network jitter, since Moonlight doesn't report real
+  //     packet-arrival jitter to the host (see the analysis doc for why).
+  //
+  // The thresholds below (window size, "severity scale", instability weight) are a
+  // reasonable starting point, not something measured against real network
+  // conditions - this feature could not be validated with a real GPU/encoder in the
+  // environment it was written in (see docs/dev/adaptive-bitrate-analysis.md's
+  // simulated-loss validation section for what *was* checked). Expect to retune
+  // these once tested for real.
+  constexpr size_t ADAPTIVE_BITRATE_WINDOW = 10;
+  constexpr double ADAPTIVE_BITRATE_SEVERITY_SCALE = 20.0;  // loss/sec that maps to "as bad as it gets"
+  constexpr double ADAPTIVE_BITRATE_INSTABILITY_WEIGHT = 0.5;
+
+  double update_adaptive_bitrate_scale(std::deque<double> &loss_rate_samples, double loss_rate_per_sec, double floor_scale) {
+    loss_rate_samples.push_back(loss_rate_per_sec);
+    while (loss_rate_samples.size() > ADAPTIVE_BITRATE_WINDOW) {
+      loss_rate_samples.pop_front();
+    }
+
+    double mean = std::accumulate(loss_rate_samples.begin(), loss_rate_samples.end(), 0.0) / loss_rate_samples.size();
+
+    double variance = 0.0;
+    for (double sample : loss_rate_samples) {
+      variance += (sample - mean) * (sample - mean);
+    }
+    variance /= loss_rate_samples.size();
+    double stddev = std::sqrt(variance);
+
+    double severity = std::clamp(mean / ADAPTIVE_BITRATE_SEVERITY_SCALE, 0.0, 1.0);
+    double instability = std::clamp(stddev / ADAPTIVE_BITRATE_SEVERITY_SCALE, 0.0, 1.0);
+    double badness = std::clamp(severity + ADAPTIVE_BITRATE_INSTABILITY_WEIGHT * instability, 0.0, 1.0);
+
+    // badness=0 -> scale 1.0 (full bitrate). badness=1 -> scale floor_scale.
+    return 1.0 - badness * (1.0 - floor_scale);
+  }
+
   void controlBroadcastThread(control_server_t *server) {
     server->map(packetTypes[IDX_PERIODIC_PING], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_PERIODIC_PING]"sv;
@@ -954,6 +1009,31 @@ namespace stream {
         << "time in milli since last report [" << t.count() << ']' << std::endl
         << "last good frame [" << lastGoodFrame << ']' << std::endl
         << "---end stats---";
+
+      // Adaptive bitrate (Apollo extension, off by default - see
+      // docs/dev/adaptive-bitrate-analysis.md). Feeds this same loss report - already
+      // received and previously discarded after the log line above - into a bitrate
+      // multiplier, applied on top of whatever Warp Mode already computed for
+      // session->config.bitrate at RTSP setup (not a replacement for it).
+      if (config::video.adaptive_bitrate && t.count() > 0) {
+        auto &ab = session->video.adaptive_bitrate;
+
+        double loss_rate_per_sec = count * 1000.0 / t.count();
+        double floor_scale = config::video.adaptive_bitrate_floor_pct / 100.0;
+        double new_scale = update_adaptive_bitrate_scale(ab.loss_rate_samples, loss_rate_per_sec, floor_scale);
+
+        auto now = std::chrono::steady_clock::now();
+        bool past_cooldown = (now - ab.last_reconfigure_time) >= 2s;
+        bool crossed_threshold = std::abs(new_scale - ab.applied_scale) >= 0.1;
+
+        if (past_cooldown && crossed_threshold) {
+          BOOST_LOG(info) << "Adaptive bitrate: loss rate ~" << loss_rate_per_sec << "/s over last "sv << t.count()
+                           << "ms, scaling bitrate to "sv << (int) (new_scale * 100) << "% of Warp-adjusted target"sv;
+          session->mail->event<double>(mail::bitrate_scale)->raise(new_scale);
+          ab.applied_scale = new_scale;
+          ab.last_reconfigure_time = now;
+        }
+      }
     });
 
     server->map(packetTypes[IDX_REQUEST_IDR_FRAME], [&](session_t *session, const std::string_view &payload) {

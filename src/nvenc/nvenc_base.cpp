@@ -451,8 +451,49 @@ namespace nvenc {
       BOOST_LOG(info) << "NvEnc: created encoder " << video_format_string << quality_preset_string_from_guid(init_params.presetGUID) << extra;
     }
 
+    // Keep a copy of the config actually submitted, so reconfigure_bitrate() has
+    // something valid to mutate later - init_params/enc_config above are local to this
+    // function and go out of scope when it returns.
+    active_encode_config = enc_config;
+    active_init_params = init_params;
+    active_init_params.encodeConfig = &active_encode_config;
+
     encoder_state = {};
     fail_guard.disable();
+    return true;
+  }
+
+  bool nvenc_base::reconfigure_bitrate(uint32_t bitrate_kbps) {
+    if (!encoder || !nvenc) {
+      return false;
+    }
+
+    uint32_t new_bitrate = bitrate_kbps * 1000;
+    uint32_t old_bitrate = active_encode_config.rcParams.averageBitRate;
+    if (old_bitrate == 0) {
+      // create_encoder() hasn't completed successfully yet.
+      return false;
+    }
+
+    if (active_encode_config.rcParams.vbvBufferSize != 0) {
+      // Keep the VBV buffer proportional to the new bitrate, matching how it was
+      // originally sized relative to averageBitRate in create_encoder().
+      active_encode_config.rcParams.vbvBufferSize = (uint32_t) ((uint64_t) active_encode_config.rcParams.vbvBufferSize * new_bitrate / old_bitrate);
+    }
+    active_encode_config.rcParams.averageBitRate = new_bitrate;
+
+    NV_ENC_RECONFIGURE_PARAMS reconfigure_params = {min_struct_version(NV_ENC_RECONFIGURE_PARAMS_VER)};
+    active_init_params.encodeConfig = &active_encode_config;  // pointer may have moved if this object was relocated
+    reconfigure_params.reInitEncodeParams = active_init_params;
+    reconfigure_params.resetEncoder = 0;
+    reconfigure_params.forceIDR = 0;
+
+    if (nvenc_failed(nvenc->nvEncReconfigureEncoder(encoder, &reconfigure_params))) {
+      BOOST_LOG(error) << "NvEnc: NvEncReconfigureEncoder() failed: " << last_nvenc_error_string;
+      return false;
+    }
+
+    BOOST_LOG(info) << "NvEnc: reconfigured bitrate to " << bitrate_kbps << " kbps";
     return true;
   }
 

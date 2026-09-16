@@ -1465,6 +1465,69 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### adaptive_bitrate
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            When enabled, Apollo reacts to packet loss reported by the client
+            (Moonlight already sends this periodically; without this option it is
+            logged and discarded) by temporarily lowering the video bitrate.
+            @attention{NVIDIA/NVENC only. Other encoders (software, VA-API,
+            QuickSync, AMD AMF) don't support changing the bitrate of an
+            already-running encode session, so this option has no effect for them.}
+            The adjustment is applied on top of whatever bitrate Warp Mode already
+            computed, not instead of it, and scales back up automatically as loss
+            subsides. See docs/dev/adaptive-bitrate-analysis.md for how the network
+            condition is estimated (including why it's an approximation of jitter,
+            not a real measurement) and what remains unverified pending real-world
+            testing.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            adaptive_bitrate = enabled
+            @endcode</td>
+    </tr>
+</table>
+
+### adaptive_bitrate_floor_pct
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            When `adaptive_bitrate` is enabled, the bitrate is never scaled down
+            below this percentage of the originally configured value (after any
+            Warp Mode adjustment), no matter how bad the connection gets.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            50
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">10-100</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            adaptive_bitrate_floor_pct = 50
+            @endcode</td>
+    </tr>
+</table>
+
 ## Network
 
 ### upnp
