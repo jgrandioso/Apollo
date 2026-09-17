@@ -1,6 +1,14 @@
 # Plan a futuro: bitrate adaptativo para AMD (AMF nativo)
 
-**Estado: no iniciado.** Esto es un documento de planificación, no una
+**Estado: superado — retomado e implementado el 2026-09-17.** Ver
+`docs/dev/amd-amf-adaptive-bitrate-analysis.md` y
+`docs/dev/amd-amf-adaptive-bitrate.md` (branch
+`feature/amd-amf-adaptive-bitrate`) para el diseño real y el cierre. Se
+tomó la vía (1) de este documento (parchear ffmpeg), no la (2) (wrapper
+nativo del SDK) — quedan los detalles de por qué abajo, siguen siendo
+válidos como contexto histórico.
+
+**Estado original: no iniciado.** Esto es un documento de planificación, no una
 feature en marcha — no hay branch creado todavía. Se escribe ahora
 (2026-09-16) tras terminar `feature/adaptive-bitrate` (NVENC), a petición
 tuya, para dejar constancia de por dónde habría que empezar si algún día
