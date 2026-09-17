@@ -513,6 +513,9 @@ namespace config {
     0,  // max_bitrate
     0,  // minimum_fps_target (0 = framerate)
 
+    false,  // adaptive_bitrate
+    50,  // adaptive_bitrate_floor_pct
+
     "1920x1080x60",  // fallback_mode
     false, // isolated Display
     false, // ignore_encoder_probe_failure
@@ -1205,6 +1208,9 @@ namespace config {
 
     int_f(vars, "max_bitrate", video.max_bitrate);
     double_between_f(vars, "minimum_fps_target", video.minimum_fps_target, {0.0, 1000.0});
+
+    bool_f(vars, "adaptive_bitrate", video.adaptive_bitrate);
+    int_between_f(vars, "adaptive_bitrate_floor_pct", video.adaptive_bitrate_floor_pct, {10, 100});
 
     string_f(vars, "fallback_mode", video.fallback_mode);
     bool_f(vars, "isolated_virtual_display_option", video.isolated_virtual_display_option);

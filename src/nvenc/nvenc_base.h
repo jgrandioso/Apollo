@@ -69,6 +69,21 @@ namespace nvenc {
      */
     bool invalidate_ref_frames(uint64_t first_frame, uint64_t last_frame);
 
+    /**
+     * @brief Change the target bitrate of an already-running encoder session, without
+     *        tearing it down (`NvEncReconfigureEncoder()` with `resetEncoder = 0`, so
+     *        rate-control state is preserved and no keyframe is forced).
+     * @details Apollo extension for the adaptive-bitrate feature (see
+     *          docs/dev/adaptive-bitrate-analysis.md). Only meaningful after a
+     *          successful `create_encoder()` call - `active_encode_config` is populated
+     *          there. If a custom VBV buffer size was in use, it is rescaled
+     *          proportionally to the new bitrate.
+     * @param bitrate_kbps New average/max bitrate, in kbps.
+     * @return `true` on success, `false` on error (encoder not created yet, or the
+     *         driver rejected the reconfiguration).
+     */
+    bool reconfigure_bitrate(uint32_t bitrate_kbps);
+
   protected:
     /**
      * @brief Required. Used for loading NvEnc library and setting `nvenc` variable with `NvEncodeAPICreateInstance()`.
@@ -143,6 +158,15 @@ namespace nvenc {
   private:
     NV_ENC_OUTPUT_PTR output_bitstream = nullptr;
     uint32_t minimum_api_version = 0;
+
+    // Persisted copies of the structs passed to NvEncInitializeEncoder(), kept around
+    // solely so reconfigure_bitrate() has a valid base to mutate and resubmit via
+    // NvEncReconfigureEncoder() - create_encoder() itself only needs them on the stack.
+    // active_init_params.encodeConfig is repointed at &active_encode_config right after
+    // the copy, since the pointer it held at init time (into create_encoder()'s stack
+    // frame) is no longer valid once create_encoder() returns.
+    NV_ENC_CONFIG active_encode_config = {};
+    NV_ENC_INITIALIZE_PARAMS active_init_params = {};
 
     struct {
       uint64_t last_encoded_frame_index = 0;

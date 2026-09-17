@@ -424,6 +424,20 @@ namespace video {
       }
     }
 
+    /**
+     * @brief Adaptive bitrate (Apollo extension, see docs/dev/adaptive-bitrate-analysis.md):
+     *        change this session's target bitrate without tearing it down.
+     * @param bitrate_kbps New target bitrate, in kbps.
+     * @return `true` on success.
+     */
+    bool reconfigure_bitrate(uint32_t bitrate_kbps) {
+      if (!device || !device->nvenc) {
+        return false;
+      }
+
+      return device->nvenc->reconfigure_bitrate(bitrate_kbps);
+    }
+
     nvenc::nvenc_encoded_frame encode_frame(uint64_t frame_index) {
       if (!device || !device->nvenc) {
         return {};
@@ -1953,6 +1967,10 @@ namespace video {
     auto packets = mail::man->queue<packet_t>(mail::video_packets);
     auto idr_events = mail->event<bool>(mail::idr);
     auto invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
+    // Adaptive bitrate (Apollo extension): see docs/dev/adaptive-bitrate-analysis.md.
+    // Payload is a 0-1 multiplier applied on top of config.bitrate (which already
+    // includes any Warp Mode adjustment from rtsp.cpp), not a replacement for it.
+    auto bitrate_scale_events = mail->event<double>(mail::bitrate_scale);
 
     {
       // Load a dummy image into the AVFrame to ensure we have something to encode
@@ -2003,6 +2021,19 @@ namespace video {
       while (invalidate_ref_frames_events->peek()) {
         if (auto frames = invalidate_ref_frames_events->pop(0ms)) {
           session->invalidate_ref_frames(frames->first, frames->second);
+        }
+      }
+
+      // Adaptive bitrate: only meaningful for NVENC sessions today (see
+      // docs/dev/adaptive-bitrate-analysis.md for why - avcodec-based backends have
+      // no equivalent hot-reconfigure path). Silently ignored for other encoders,
+      // same as invalidate_ref_frames() already is when unsupported.
+      while (bitrate_scale_events->peek()) {
+        if (auto scale = bitrate_scale_events->pop(0ms)) {
+          if (auto *nvenc_session = dynamic_cast<nvenc_encode_session_t *>(session.get())) {
+            auto new_bitrate_kbps = (uint32_t) std::max(1.0, config.bitrate * (*scale));
+            nvenc_session->reconfigure_bitrate(new_bitrate_kbps);
+          }
         }
       }
 
