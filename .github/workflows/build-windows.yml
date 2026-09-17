@@ -135,6 +135,13 @@ jobs:
             "https://github.com/jgrandioso/build-deps/releases/download/amf-dynamic-bitrate-windows-amd64/Windows-AMD64-ffmpeg.tar.gz"
           tar -xzf ffmpeg-prepared.tar.gz -C third-party/build-deps/dist
           mv third-party/build-deps/dist/ffmpeg third-party/build-deps/dist/Windows-AMD64
+          # ffmpeg trae su propia copia vendorizada de ffnvcodec/nvEncodeAPI.h
+          # (la necesita para compilar su propio nvenc de ffmpeg). Esta ruta
+          # aparece antes que third-party/nv-codec-headers/include en el orden
+          # de -isystem, tapando la version que src/nvenc/*.h tiene fijada
+          # (sdk/12.0) y rompiendo la compilacion nativa de NVENC de Apollo.
+          # Apollo no necesita la copia de ffmpeg para nada, se borra.
+          rm -rf third-party/build-deps/dist/Windows-AMD64/include/ffnvcodec
 
       - name: Build Windows
         shell: msys2 {0}
