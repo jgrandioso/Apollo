@@ -117,6 +117,25 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Esta branch necesita un FFmpeg con el parche de bitrate dinamico de AMF
+      # (jgrandioso/build-deps, no el submodulo third-party/build-deps normal,
+      # que sigue apuntando a un commit obsoleto de una branch "dist" ya
+      # retirada en upstream - ver docs/dev/amd-amf-adaptive-bitrate.md).
+      # Se descarga como asset de un Release publico (sin necesitar permisos
+      # cruzados entre repos) y se sobrescribe directamente el directorio que
+      # el submodulo ya trae, en vez de usar la opcion -DFFMPEG_PREPARED_BINARIES
+      # de cmake: esa ruta usa una lista de librerias mas corta (le faltan
+      # libx264/libx265/libSvtAv1Enc/hdr10plus), rompe el link.
+      - name: Download patched FFmpeg (AMD AMF dynamic bitrate)
+        shell: msys2 {0}
+        run: |
+          rm -rf third-party/build-deps/dist/Windows-AMD64
+          mkdir -p third-party/build-deps/dist
+          curl -fsSL -o ffmpeg-prepared.tar.gz \
+            "https://github.com/jgrandioso/build-deps/releases/download/amf-dynamic-bitrate-windows-amd64/Windows-AMD64-ffmpeg.tar.gz"
+          tar -xzf ffmpeg-prepared.tar.gz -C third-party/build-deps/dist
+          mv third-party/build-deps/dist/ffmpeg third-party/build-deps/dist/Windows-AMD64
+
       - name: Build Windows
         shell: msys2 {0}
         env:

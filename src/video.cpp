@@ -2024,15 +2024,26 @@ namespace video {
         }
       }
 
-      // Adaptive bitrate: only meaningful for NVENC sessions today (see
-      // docs/dev/adaptive-bitrate-analysis.md for why - avcodec-based backends have
-      // no equivalent hot-reconfigure path). Silently ignored for other encoders,
-      // same as invalidate_ref_frames() already is when unsupported.
+      // Adaptive bitrate: NVENC uses an explicit reconfigure call (its C API
+      // requires one). AMD AMF goes through ffmpeg's avcodec wrapper instead,
+      // which historically only read avctx->bit_rate once at Init() - fixed by
+      // a fork-side ffmpeg patch (see docs/dev/amd-amf-adaptive-bitrate.md)
+      // that makes it re-check avctx->bit_rate every frame, so updating the
+      // public field here is enough; no reconfigure call needed. Only wired up
+      // for amdvce specifically - other avcodec-based backends (software,
+      // quicksync) don't have that patch and would silently ignore the change,
+      // same as invalidate_ref_frames() already does when unsupported.
       while (bitrate_scale_events->peek()) {
         if (auto scale = bitrate_scale_events->pop(0ms)) {
+          auto new_bitrate_kbps = (uint32_t) std::max(1.0, config.bitrate * (*scale));
           if (auto *nvenc_session = dynamic_cast<nvenc_encode_session_t *>(session.get())) {
-            auto new_bitrate_kbps = (uint32_t) std::max(1.0, config.bitrate * (*scale));
             nvenc_session->reconfigure_bitrate(new_bitrate_kbps);
+          } else if (encoder.name == "amdvce") {
+            if (auto *avcodec_session = dynamic_cast<avcodec_encode_session_t *>(session.get())) {
+              if (avcodec_session->avcodec_ctx) {
+                avcodec_session->avcodec_ctx->bit_rate = new_bitrate_kbps * 1000;
+              }
+            }
           }
         }
       }
