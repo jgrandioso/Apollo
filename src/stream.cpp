@@ -632,6 +632,46 @@ namespace stream {
       reed_solomon_release(rs);
     }>;
 
+    // reed_solomon_new() does real work - it builds a full data_shards x
+    // parity_shards parity matrix - and the result depends only on that pair
+    // of counts. Frame sizes (and so shard counts) repeat often for a given
+    // resolution/bitrate, so caching avoids rebuilding the same matrix on
+    // every single video frame sent. The audio path doesn't need this: its
+    // shard counts are compile-time constants, so it just builds its
+    // reed_solomon once when audioBroadcastThread starts. Video's shard
+    // counts vary with frame size, so they can't be hoisted out of the loop
+    // the same way - caching by (data_shards, parity_shards) is the next
+    // best thing.
+    reed_solomon *get_cached_rs(int data_shards, int parity_shards) {
+      struct entry_t {
+        int data_shards;
+        int parity_shards;
+        rs_t rs;
+      };
+
+      // fec::encode() is only ever called from the single videoBroadcastThread
+      // today, but thread_local costs nothing extra in that case and avoids
+      // any synchronization concern if that ever changes.
+      thread_local std::vector<entry_t> cache;
+
+      for (auto &entry : cache) {
+        if (entry.data_shards == data_shards && entry.parity_shards == parity_shards) {
+          return entry.rs.get();
+        }
+      }
+
+      // Frame sizes drift over a session (especially with adaptive bitrate),
+      // producing new shard-count pairs over time. Cap growth instead of
+      // caching every pair ever seen.
+      constexpr size_t max_cache_size = 16;
+      if (cache.size() >= max_cache_size) {
+        cache.clear();
+      }
+
+      cache.emplace_back(entry_t {data_shards, parity_shards, rs_t {reed_solomon_new(data_shards, parity_shards)}});
+      return cache.back().rs.get();
+    }
+
     struct fec_t {
       size_t data_shards;
       size_t nr_shards;
@@ -718,9 +758,9 @@ namespace stream {
         }
 
         // packets = parity_shards + data_shards
-        rs_t rs {reed_solomon_new(data_shards, parity_shards)};
+        auto *rs = get_cached_rs(data_shards, parity_shards);
 
-        reed_solomon_encode(rs.get(), shards_p.begin(), nr_shards, blocksize);
+        reed_solomon_encode(rs, shards_p.begin(), nr_shards, blocksize);
       }
 
       return {
@@ -744,18 +784,30 @@ namespace stream {
    * @param data1 The first data buffer.
    * @param data2 The second data buffer.
    */
-  std::vector<uint8_t> concat_and_insert(uint64_t insert_size, uint64_t slice_size, const std::string_view &data1, const std::string_view &data2) {
+  // Called once per video frame sent (videoBroadcastThread, single-threaded,
+  // one frame fully processed and sent before the next is touched), so a
+  // thread_local reused buffer is safe: nothing here outlives the current
+  // frame's processing. Only this function's own call site uses the result.
+  std::vector<uint8_t> &concat_and_insert(uint64_t insert_size, uint64_t slice_size, const std::string_view &data1, const std::string_view &data2) {
     auto data_size = data1.size() + data2.size();
     auto pad = data_size % slice_size != 0;
     auto elements = data_size / slice_size + (pad ? 1 : 0);
 
-    std::vector<uint8_t> result;
+    thread_local std::vector<uint8_t> result;
     result.resize(elements * insert_size + data_size);
 
     auto next = std::begin(data1);
     auto end = std::end(data1);
     for (auto x = 0; x < elements; ++x) {
       void *p = &result[x * (insert_size + slice_size)];
+
+      // The [p, p + insert_size) gap is filled in later by the caller
+      // (packet header fields) - but not every byte of it is guaranteed to
+      // be written (e.g. video_packet_raw_t::reserved). A freshly resize()'d
+      // vector used to zero-initialize this for us; with a reused buffer we
+      // have to do it explicitly to avoid leaking a previous frame's bytes
+      // onto the wire.
+      std::memset(p, 0, insert_size);
 
       // For the last iteration, only copy to the end of the data
       if (x == elements - 1) {
@@ -1483,7 +1535,7 @@ namespace stream {
       // Insert space for packet headers
       auto blocksize = session->config.packetsize + MAX_RTP_HEADER_SIZE;
       auto payload_blocksize = blocksize - sizeof(video_packet_raw_t);
-      auto payload_new = concat_and_insert(sizeof(video_packet_raw_t), payload_blocksize, std::string_view {(char *) &frame_header, sizeof(frame_header)}, payload);
+      auto &payload_new = concat_and_insert(sizeof(video_packet_raw_t), payload_blocksize, std::string_view {(char *) &frame_header, sizeof(frame_header)}, payload);
 
       payload = std::string_view {(char *) payload_new.data(), payload_new.size()};
 
