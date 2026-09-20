@@ -4,9 +4,17 @@ cmake_minimum_required(VERSION 3.20)
 # `cmake_path(CONVERT ... TO_NATIVE_PATH_LIST ...)` requires 3.20
 # todo - set this conditionally
 
-project(Apollo VERSION 0.0.0
-        DESCRIPTION "Self-hosted game stream host for Artemis"
-        HOMEPAGE_URL "https://github.com/ClassicOldSong/Apollo")
+# Apollo fork addition: 0.0.0 (upstream's default when no CI-provided
+# BUILD_VERSION/tag is set - see cmake/prep/build_version.cmake) made every
+# build of this fork compare as "older" than any real Apollo release, which
+# made the Web UI's update-check (index.html) permanently nag users to
+# "update" to upstream Apollo - losing every feature this fork adds. 1.0.0
+# marks this as this fork's own first real version, not a dev/git-describe
+# fallback, and is high enough to never collide with upstream's still-alpha
+# 0.4.x numbering.
+project(Apollo VERSION 1.0.0
+        DESCRIPTION "Self-hosted game stream host for Artemis (jgrandioso's personal fork)"
+        HOMEPAGE_URL "https://github.com/jgrandioso/Apollo")
 
 set(PROJECT_LICENSE "GPL-3.0-only")
 
