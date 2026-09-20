@@ -7,6 +7,43 @@ Lo desarrollo yo solo, sin experiencia previa en C++, así que todo el
 código está pensado para ser legible y mantenible por mí a largo plazo,
 no compacto ni "clever".
 
+**Nota para quien encuentre esto en el futuro**: todo el código, la
+investigación y la documentación de este fork se hicieron con
+[Claude Code](https://claude.com/claude-code) (Claude, de Anthropic),
+bajo mi supervisión directa en cada paso — nada se comiteó ni se subió
+sin que yo lo revisara antes. Si vas a reutilizar o adaptar algo de aquí,
+ten en cuenta que el nivel de verificación varía por feature: algunas
+están confirmadas en hardware Windows real, otras solo compiladas en CI
+sin ejecutar — el estado real de cada una está en la tabla de abajo y en
+`docs/dev/`, sin maquillar.
+
+## Bugs reales de Apollo (no de este fork) encontrados en el camino
+
+Investigando por qué algunas cosas no funcionaban, aparecieron varios
+bugs genuinos del propio Apollo — no específicos de ninguna feature de
+este fork, afectarían a cualquiera compilando desde el código fuente
+público tal cual está hoy:
+
+- **SudoVDA nunca funciona en una build compilada desde cero** —
+  `install.bat` depende de dos binarios (`nefconc.exe`, `SudoVDA.dll`)
+  que no están en el repo público ni se descargan en ningún sitio.
+  Reportado sin resolver en
+  [#1044](https://github.com/ClassicOldSong/Apollo/issues/1044) y
+  [#1360](https://github.com/ClassicOldSong/Apollo/issues/1360)
+  ("SudoVDA Driver status: Uninitialized").
+- **AMD AMF se cuelga para siempre al arrancar** — desajuste de versión
+  entre el FFmpeg realmente usado y código escrito para una versión más
+  nueva. Ver [#1588](https://github.com/ClassicOldSong/Apollo/issues/1588).
+- **Perfil H.264 de AMD AMF roto** — un campo que `video::config_t`
+  nunca ha tenido.
+
+Los tres están arreglados en `master` de este fork (ver `CHANGELOG.md`
+para el detalle técnico de cada uno). Podrían proponerse como PR al
+repo original — de momento se quedan aquí. El proyecto original lleva
+más de un año sin publicar una release nueva (última: `v0.4.7-alpha.1`,
+12/08/2025) y meses sin commits, lo que probablemente explica por qué
+nadie los ha detectado/arreglado todavía.
+
 ## Por qué existe este fork
 
 Cuatro cosas que quería y que Apollo/Sunshine no ofrecían:

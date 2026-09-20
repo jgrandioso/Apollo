@@ -22,6 +22,52 @@ de cada uno.
   Sunshine→Apollo, y una dependencia (`libicu76`) que faltaba en la
   imagen final. Ninguno toca código de la aplicación. Detalle completo en
   `docs/dev/building-linux.md`.
+- **Bug real de Apollo/upstream — perfil H.264 del encoder AMD AMF roto**:
+  `src/video.cpp` leía un campo (`cfg.profile`) que `video::config_t`
+  nunca ha tenido — nunca se detectó porque ese código Windows-only nunca
+  se había compilado en CI. Sustituido por un valor fijo (`"high"`),
+  mismo patrón que usan NVENC/QuickSync.
+- **Bug real de Apollo/upstream — cuelgue permanente al cerrar cualquier
+  sesión de encoder AMD AMF**: `~avcodec_encode_session_t()` intentaba
+  vaciar el encoder con una llamada escrita para FFmpeg 8.0, mientras el
+  FFmpeg realmente usado (`third-party/build-deps`, fijado a un commit
+  de mediados de 2025) es anterior a esa migración. Sin este fix, Apollo
+  ni siquiera arrancaba con una GPU AMD activa — se colgaba para siempre
+  en `probe_encoders()`. Confirmado en hardware real (iGPU de un
+  portátil ASUS). Ver [issue upstream #1588](https://github.com/ClassicOldSong/Apollo/issues/1588).
+- **Bug real de Apollo/upstream — SudoVDA nunca funciona en una build
+  compilada desde cero**: `drivers/sudovda/install.bat` depende de dos
+  binarios (`nefconc.exe`, la herramienta que crea el nodo de
+  dispositivo, y `SudoVDA.dll`, el driver UMDF2 en sí) que **ni este
+  fork, ni el repo público de ClassicOldSong/Apollo, ni el propio repo
+  del driver SudoVDA los incluyen o descargan en ningún sitio**. Sin
+  ellos, el dispositivo nunca se crea (o se crea sin driver asociado) y
+  la Web UI muestra "Driver status: Uninitialized" para siempre — bug
+  ampliamente reportado sin resolver
+  ([#1044](https://github.com/ClassicOldSong/Apollo/issues/1044),
+  [#1360](https://github.com/ClassicOldSong/Apollo/issues/1360), ambas
+  con ese título exacto). Arreglado extrayendo ambos binarios del
+  instalador oficial `v0.4.6` (verificado que su `sudovda.cat`/`.cer`
+  son idénticos byte a byte a los que ya trae Apollo, para no romper la
+  firma del catálogo) y vendorizándolos en
+  `src_assets/windows/drivers/sudovda/`. Confirmado en dos PCs Windows
+  reales distintos.
+- **Rendimiento — trabajo repetido innecesario en el envío de cada frame
+  de vídeo** (`src/stream.cpp`): la matriz de paridad Reed-Solomon se
+  reconstruía en cada frame (el camino de audio ya la construye una sola
+  vez, por comparación se detectó el descuido) — ahora se cachea por
+  pareja `(data_shards, parity_shards)`. `concat_and_insert()` asignaba
+  un buffer de heap nuevo en cada frame — ahora reutiliza un buffer
+  `thread_local`, con cuidado explícito de no filtrar bytes del frame
+  anterior en la cabecera. Sin cambio de comportamiento observable,
+  verificado compilando en Linux y Windows.
+
+### Añadido
+- **CI en GitHub Actions** (`.github/workflows/build-windows.yml`,
+  `build-linux.yml`) — compila cualquier branch en runners reales de
+  Windows y Linux con un solo clic, sin instalar ningún toolchain en
+  local. Recuperados y adaptados de los workflows originales de Apollo
+  (borrados en algún punto del historial de upstream).
 
 ## `feature/frame-pacing`
 
