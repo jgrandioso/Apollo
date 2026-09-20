@@ -1107,6 +1107,38 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### virtual_display_duplicate_primary
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Apollo extension. When a client uses the virtual display, put it in Windows
+            duplicate/clone mode with the current primary display instead of adding it as a
+            separate extended display, at the resolution the client requested. Mutually
+            exclusive with `isolated_virtual_display_option` - enabling one disables the other,
+            both in the Web UI and (if the config file is hand-edited) at runtime.
+            @note{Applies to Windows only.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}enabled@endcode</td>
+    </tr>
+    <tr>
+        <th>Value</th>
+        <th>Action</th>
+    </tr>
+    <tr>
+        <td>disabled</td>
+        <td>Add the virtual display as a separate extended display, same as upstream Apollo</td>
+    </tr>
+    <tr>
+        <td>enabled</td>
+        <td>Duplicate the virtual display with the primary display, at the client's requested resolution</td>
+    </tr>
+</table>
+
 
 ### dd_configuration_option
 

@@ -29,6 +29,29 @@ const currentDriverStatus = computed(() => sudovdaStatus[props.vdisplay])
 
 const config = ref(props.config)
 
+// Apollo fork addition: virtual_display_duplicate_primary and
+// isolated_virtual_display_option are mutually exclusive (duplicate content
+// vs. reposition as a non-overlapping extended display) - enabling one here
+// clears the other, instead of letting the config end up with both set.
+const duplicatePrimary = computed({
+  get: () => config.value.virtual_display_duplicate_primary,
+  set: (value) => {
+    config.value.virtual_display_duplicate_primary = value;
+    if (value) {
+      config.value.isolated_virtual_display_option = false;
+    }
+  }
+});
+const isolatedVirtualDisplay = computed({
+  get: () => config.value.isolated_virtual_display_option,
+  set: (value) => {
+    config.value.isolated_virtual_display_option = value;
+    if (value) {
+      config.value.virtual_display_duplicate_primary = false;
+    }
+  }
+});
+
 const validateFallbackMode = (event) => {
   const value = event.target.value;
   if (!value.match(/^\d+x\d+x\d+(\.\d+)?$/)) {
@@ -161,11 +184,20 @@ const validateFallbackMode = (event) => {
               v-if="platform === 'windows'"
     ></Checkbox>
 
+    <!-- Duplicate Virtual Display with Primary -->
+    <Checkbox class="mb-3"
+              id="virtual_display_duplicate_primary"
+              locale-prefix="config"
+              v-model="duplicatePrimary"
+              default="true"
+              v-if="platform === 'windows'"
+    ></Checkbox>
+
     <!-- Isolated Virtual Display -->
     <Checkbox class="mb-3"
               id="isolated_virtual_display_option"
               locale-prefix="config"
-              v-model="config.isolated_virtual_display_option"
+              v-model="isolatedVirtualDisplay"
               default="false"
               v-if="platform === 'windows'"
     ></Checkbox>

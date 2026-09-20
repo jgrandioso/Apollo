@@ -22,6 +22,52 @@ de cada uno.
   Sunshine→Apollo, y una dependencia (`libicu76`) que faltaba en la
   imagen final. Ninguno toca código de la aplicación. Detalle completo en
   `docs/dev/building-linux.md`.
+- **Bug real de Apollo/upstream — perfil H.264 del encoder AMD AMF roto**:
+  `src/video.cpp` leía un campo (`cfg.profile`) que `video::config_t`
+  nunca ha tenido — nunca se detectó porque ese código Windows-only nunca
+  se había compilado en CI. Sustituido por un valor fijo (`"high"`),
+  mismo patrón que usan NVENC/QuickSync.
+- **Bug real de Apollo/upstream — cuelgue permanente al cerrar cualquier
+  sesión de encoder AMD AMF**: `~avcodec_encode_session_t()` intentaba
+  vaciar el encoder con una llamada escrita para FFmpeg 8.0, mientras el
+  FFmpeg realmente usado (`third-party/build-deps`, fijado a un commit
+  de mediados de 2025) es anterior a esa migración. Sin este fix, Apollo
+  ni siquiera arrancaba con una GPU AMD activa — se colgaba para siempre
+  en `probe_encoders()`. Confirmado en hardware real (iGPU de un
+  portátil ASUS). Ver [issue upstream #1588](https://github.com/ClassicOldSong/Apollo/issues/1588).
+- **Bug real de Apollo/upstream — SudoVDA nunca funciona en una build
+  compilada desde cero**: `drivers/sudovda/install.bat` depende de dos
+  binarios (`nefconc.exe`, la herramienta que crea el nodo de
+  dispositivo, y `SudoVDA.dll`, el driver UMDF2 en sí) que **ni este
+  fork, ni el repo público de ClassicOldSong/Apollo, ni el propio repo
+  del driver SudoVDA los incluyen o descargan en ningún sitio**. Sin
+  ellos, el dispositivo nunca se crea (o se crea sin driver asociado) y
+  la Web UI muestra "Driver status: Uninitialized" para siempre — bug
+  ampliamente reportado sin resolver
+  ([#1044](https://github.com/ClassicOldSong/Apollo/issues/1044),
+  [#1360](https://github.com/ClassicOldSong/Apollo/issues/1360), ambas
+  con ese título exacto). Arreglado extrayendo ambos binarios del
+  instalador oficial `v0.4.6` (verificado que su `sudovda.cat`/`.cer`
+  son idénticos byte a byte a los que ya trae Apollo, para no romper la
+  firma del catálogo) y vendorizándolos en
+  `src_assets/windows/drivers/sudovda/`. Confirmado en dos PCs Windows
+  reales distintos.
+- **Rendimiento — trabajo repetido innecesario en el envío de cada frame
+  de vídeo** (`src/stream.cpp`): la matriz de paridad Reed-Solomon se
+  reconstruía en cada frame (el camino de audio ya la construye una sola
+  vez, por comparación se detectó el descuido) — ahora se cachea por
+  pareja `(data_shards, parity_shards)`. `concat_and_insert()` asignaba
+  un buffer de heap nuevo en cada frame — ahora reutiliza un buffer
+  `thread_local`, con cuidado explícito de no filtrar bytes del frame
+  anterior en la cabecera. Sin cambio de comportamiento observable,
+  verificado compilando en Linux y Windows.
+
+### Añadido
+- **CI en GitHub Actions** (`.github/workflows/build-windows.yml`,
+  `build-linux.yml`) — compila cualquier branch en runners reales de
+  Windows y Linux con un solo clic, sin instalar ningún toolchain en
+  local. Recuperados y adaptados de los workflows originales de Apollo
+  (borrados en algún punto del historial de upstream).
 
 ## `feature/frame-pacing`
 
@@ -87,16 +133,53 @@ El algoritmo de decisión se validó de forma aislada con escenarios
 sintéticos de pérdida. `NvEncReconfigureEncoder` en sí no se ha podido
 ejecutar (necesita GPU NVIDIA real). Detalle: `docs/dev/adaptive-bitrate.md`.
 
-### Documentado (sin implementar)
-- Investigación de por qué esto no se pudo hacer también para AMD en la
-  misma feature (ffmpeg fija el bitrate del encoder AMF solo al
-  inicializar, nunca por frame) y plan a futuro si se retoma:
-  `docs/dev/amd-amf-adaptive-bitrate-future-plan.md`. Actualización
-  posterior: confirmado con la cabecera oficial de AMD que el bitrate
-  **sí es una propiedad dinámica de verdad** — técnicamente más simple
-  que el mecanismo de NVIDIA. Pospuesto de todas formas: requeriría un
-  fork aparte de `LizardByte/build-deps` con su propio pipeline (aunque
-  el build en sí correría gratis en GitHub Actions, no en este servidor).
+### Documentado (retomado en `feature/amd-amf-adaptive-bitrate`, ver abajo)
+- Investigación original de por qué esto no se pudo hacer también para
+  AMD en la misma feature (ffmpeg fija el bitrate del encoder AMF solo al
+  inicializar, nunca por frame) queda en
+  `docs/dev/amd-amf-adaptive-bitrate-future-plan.md` como contexto
+  histórico — confirmó que el bitrate de AMF **sí es una propiedad
+  dinámica de verdad**, lo que hizo viable la branch de abajo.
+
+## `feature/amd-amf-adaptive-bitrate`
+
+### Añadido
+- Bitrate adaptativo también para AMD AMF (H.264/HEVC/AV1), reutilizando
+  el mismo mecanismo de `feature/adaptive-bitrate` (informes de pérdida
+  de Moonlight → `bitrate_scale_events` → `encode_run()`). A diferencia
+  de NVENC (que necesita una llamada explícita de "reconfigure"), aquí
+  basta con actualizar `avcodec_ctx->bit_rate` directamente — el parche
+  de ffmpeg (ver abajo) recoge el cambio en el siguiente frame por su
+  cuenta. Sin flags nuevos: reutiliza `adaptive_bitrate`/
+  `adaptive_bitrate_floor_pct`, ya existentes.
+- **Parche de ffmpeg** en un fork aparte,
+  [`jgrandioso/build-deps`](https://github.com/jgrandioso/build-deps)
+  (`patches/FFmpeg/FFmpeg/AMF/01-dynamic-bitrate.patch`) — hace que el
+  wrapper de AMF de ffmpeg reaccione a cambios de bitrate en caliente, en
+  vez de fijarlo solo una vez al inicializar. Publicado como
+  [Release descargable](https://github.com/jgrandioso/build-deps/releases/tag/amf-dynamic-bitrate-windows-amd64),
+  al margen del submódulo `third-party/build-deps` de Apollo (que sigue
+  fijado a un commit obsoleto de una branch `dist` ya retirada en
+  upstream — ver el análisis).
+
+### Corregido (prerrequisito, hereda a todas las branches vía `master`)
+- Cuelgue permanente al cerrar cualquier sesión de encoder AMD AMF
+  (incluida la sesión de prueba de un frame que usa `probe_encoders()` al
+  arrancar) — causado por un desajuste de versión entre un código de
+  drenado escrito para FFmpeg 8.0 y el FFmpeg realmente usado (anterior a
+  esa migración). Sin este fix no se podía ni arrancar Apollo con AMD.
+  Confirmado en hardware real. Ver commit "fix(video): remove
+  encoder-teardown drain that hangs forever on AMD AMF" en `master`, e
+  [issue upstream #1588](https://github.com/ClassicOldSong/Apollo/issues/1588).
+
+**Estado**: compila limpio de verdad en CI de Windows real (no
+simulado). El parche de ffmpeg aplica limpio, verificado con `git apply
+--check`. Durante la validación se encontró y arregló un choque de
+cabeceras (`ffnvcodec/nvEncodeAPI.h`) que rompía la compilación nativa de
+NVENC de Apollo — aislado con una prueba de control antes de arreglarlo.
+Ejecución real sobre GPU AMD (`SetProperty` en una sesión AMF activa)
+sigue sin confirmarse — necesita hardware Windows real. Detalle:
+`docs/dev/amd-amf-adaptive-bitrate.md`.
 
 ## `feature/amd-high-motion-quality-boost`
 

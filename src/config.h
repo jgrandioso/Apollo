@@ -155,6 +155,8 @@ namespace config {
     std::string fallback_mode;
     bool isolated_virtual_display_option;
     bool ignore_encoder_probe_failure;
+
+    bool virtual_display_duplicate_primary;  ///< Apollo extension: when a virtual display is created for a client, put it in Windows duplicate/clone mode with the current primary display instead of adding it as a separate extended display. Default on (unlike other extensions in this fork) - mutually exclusive with isolated_virtual_display_option, both in the Web UI and at runtime (this one wins if both are somehow true).
   };
 
   struct audio_t {

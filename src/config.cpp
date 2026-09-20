@@ -522,6 +522,8 @@ namespace config {
     "1920x1080x60",  // fallback_mode
     false, // isolated Display
     false, // ignore_encoder_probe_failure
+
+    true,  // virtual_display_duplicate_primary
   };
 
   audio_t audio {
@@ -1222,6 +1224,7 @@ namespace config {
     string_f(vars, "fallback_mode", video.fallback_mode);
     bool_f(vars, "isolated_virtual_display_option", video.isolated_virtual_display_option);
     bool_f(vars, "ignore_encoder_probe_failure", video.ignore_encoder_probe_failure);
+    bool_f(vars, "virtual_display_duplicate_primary", video.virtual_display_duplicate_primary);
 
     path_f(vars, "pkey", nvhttp.pkey);
     path_f(vars, "cert", nvhttp.cert);
