@@ -172,23 +172,41 @@ de Windows requiere licencia de pago. No se investigó más a fondo — se
 deja anotado aquí como vía a revisar en el futuro si el proyecto madura y
 confirma soporte de Windows.
 
+## Instalación del driver: no hace falta nada manual
+
+**Actualización (2026-09-20):** no hay un instalador aparte de HIDMaestro
+que ejecutar. Verificado directamente en `tools/hidmaestro-bridge/Program.cs:65-71`:
+el propio bridge comprueba `s_context.IsDriverInstalled` al arrancar y, si
+no lo está, llama a `s_context.InstallDriver()` automáticamente — mismo
+patrón que documenta el propio SDK de HIDMaestro (README: *"Pure user
+mode: no kernel driver, no EV cert, no reboots"*, certificado autofirmado
+localmente, sin modo de pruebas de Windows).
+
+Único requisito real: ese primer arranque necesita permisos de
+administrador (instalar un driver, aunque sea en modo usuario, requiere
+elevación). Si Apollo corre como servicio de Windows (la vía normal del
+instalador), ya va elevado y no hace falta nada especial. Si se ejecuta
+el `.exe` a mano sin "Ejecutar como administrador", `InstallDriver()`
+fallaría — el bridge ya captura ese error con un try/catch y lo reporta
+limpio vía el protocolo JSON (`EmitError`) en vez de colgarse, así que se
+vería en `sunshine.log`.
+
 ## Cómo activar/probar una vez en Windows
 
-1. Instalar .NET 10 SDK y Visual Studio 2022+ (requisito de HIDMaestro).
-2. Compilar con el flag nuevo:
-   ```
-   cmake -B build -G Ninja -S . -DSUNSHINE_ENABLE_HIDMAESTRO=ON
-   ninja -C build
-   ```
-   La primera vez descargará el release de HIDMaestro automáticamente.
-3. Si falla la compilación del bridge (`hidmaestro-bridge.csproj`), es
+1. Compilar vía CI (`.github/workflows/build-windows.yml`, ya incluye
+   `-DSUNSHINE_ENABLE_HIDMAESTRO=ON` y la instalación de .NET 10 SDK
+   automática — no hace falta instalar nada en local, ver
+   `README-fork.md`) o en local si se prefiere (requiere .NET 10 SDK +
+   Visual Studio 2022+).
+2. Instalar el `.exe` resultante normalmente (como servicio, para que el
+   primer arranque de HIDMaestro ya vaya elevado).
+3. En la Web UI de Apollo → pestaña **Input** → **Gamepad Input Backend**
+   → seleccionar "HIDMaestro". Guardar y reiniciar el stream.
+4. Conectar un mando Xbox Series real en el cliente Moonlight, jugar algo
+   que use rumble de gatillos (ej. un juego de carreras), y comprobar si
+   se siente. Si no, revisar los logs de Apollo (busca "hidmaestro").
+5. Si falla la compilación del bridge (`hidmaestro-bridge.csproj`), es
    probable que la versión del SDK instalada haya cambiado algo desde que
    se escribió este código — comparar `Program.cs` contra el SDK
    instalado (IntelliSense de Visual Studio) y corregir lo que no
    coincida.
-4. En la Web UI de Apollo → pestaña **Input** → **Gamepad Input Backend**
-   → seleccionar "HIDMaestro". Guardar y reiniciar el stream.
-5. Conectar un mando Xbox Series real en el cliente Moonlight, jugar algo
-   que use rumble de gatillos (ej. un juego de carreras), y comprobar si
-   se siente. Si no, revisar los logs de Apollo (busca "hidmaestro") y
-   los puntos 2-3 de la lista de arriba.
