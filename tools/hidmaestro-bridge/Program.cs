@@ -39,15 +39,23 @@
 // captured a real packet from Steam's controller vibration test:
 // source=HidOutput (NOT XInput - the original code only accepted XInput
 // and silently dropped everything else, which alone explained the total
-// silence), len=7, bytes 00 00 00 00 FF 00 EB. HandleOutputReceived() now
-// handles HidOutput with that 7-byte shape (trailing "FF 00 EB" matches
-// the previously-guessed 13-byte layout's tail, header apparently
-// stripped for this source) and, separately, XInput using the format
-// HMOutputPacket.cs's own doc comment actually documents (5 bytes: cmd +
-// size + lo motor + hi motor + reserved) rather than the cross-project
-// GIP-shaped guess used before. Diagnostic logging kept in place - the
-// captured sample was all-zero, so the LT/RT/LM/RM byte order within
-// HidOutput's 7 bytes is still an inference, not confirmed.
+// silence), len=7, bytes 00 00 00 00 FF 00 EB. HandleOutputReceived()
+// briefly handled HidOutput with a 7-byte shape inferred from that capture,
+// alongside XInput using the format HMOutputPacket.cs's own doc comment
+// actually documents (5 bytes: cmd + size + lo motor + hi motor +
+// reserved).
+//
+// UPDATE (2026-09-20, same day): the HidOutput branch was reverted.
+// HIDMaestro's own WGI investigation (docs/investigations/wgi-silent-sink-2026-04
+// in their repo - see docs/dev/hidmaestro-backend.md for the summary)
+// describes WGI sending control/probe packets (00 0D 00 00 01, 00 00 00 00 02)
+// that never carry real motor data, structurally similar to the all-zero
+// capture this branch was built from. Steam almost certainly talks to this
+// device via WGI. Treating that capture as real (if zero) rumble data risked
+// emitting a spurious rumble:0,0 event on every WGI probe, potentially
+// stomping a real value that had just arrived via genuine XInputSetState.
+// Only the XInput path remains - real rumble was confirmed working through
+// an actual game using it. Diagnostic [diag] logging kept in place.
 
 using System.Text.Json.Nodes;
 using HIDMaestro;
@@ -206,44 +214,22 @@ internal static class Program
 
         var data = packet.Data.Span;
 
-        if (packet.Source == HMOutputSource.HidOutput)
-        {
-            // CONFIRMED wrong assumption fixed (2026-09-20): the original
-            // code only accepted HMOutputSource.XInput, but a real capture
-            // (Steam's controller vibration test) arrived as HidOutput
-            // instead - Steam talks to this virtual device via a raw HID
-            // output report, not XInputSetState. Steam's packet was 7 bytes:
-            // 00 00 00 00 FF 00 EB. The trailing "FF 00 EB" matches the tail
-            // of the previously-guessed 13-byte GIP layout exactly, so this
-            // looks like the same [LT, RT, LM, RM, 0xFF, 0x00, 0xEB] shape
-            // with the leading GIP header (6 bytes, including the old
-            // data[5]==0x0F marker) stripped - HMOutputSource.HidOutput's
-            // own doc comment says it carries "no Report ID byte", which is
-            // consistent with a shorter, header-less payload here.
-            // UNCONFIRMED: the sample was all-zero (LT=RT=LM=RM=0), so the
-            // byte ORDER within the first 4 bytes couldn't be verified -
-            // only that this shape/length is right. If rumble ends up on
-            // the wrong motor, check a non-zero [diag] line and reorder.
-            if (data.Length == 7 && data[4] == 0xFF && data[5] == 0x00 && data[6] == 0xEB)
-            {
-                EmitEvent(new JsonObject
-                {
-                    ["event"] = "rumble",
-                    ["id"] = id,
-                    ["large"] = data[2],
-                    ["small"] = data[3],
-                });
-                EmitEvent(new JsonObject
-                {
-                    ["event"] = "trigger_rumble",
-                    ["id"] = id,
-                    ["left"] = data[0],
-                    ["right"] = data[1],
-                });
-            }
-            return;
-        }
-
+        // Apollo fork addition (2026-09-20, REVERTED same day): originally
+        // this also handled HMOutputSource.HidOutput, inferred from a Steam
+        // capture (00 00 00 00 FF 00 EB) that looked like the tail of the
+        // old 13-byte guess with a stripped header. Reverted after finding
+        // HIDMaestro's own WGI investigation (see the update further down
+        // in docs/dev/hidmaestro-backend.md): Steam almost certainly talks
+        // to this virtual device via WGI, and WGI is documented to send
+        // control/probe packets (00 0D 00 00 01, 00 00 00 00 02) that carry
+        // no real motor data even when it never reaches the driver's
+        // vibration dispatch at all - structurally similar in shape to what
+        // was captured here. Treating that capture as real (if all-zero)
+        // rumble data risked emitting a spurious rumble:0,0 event on every
+        // WGI probe, potentially stomping a real value that had just arrived
+        // via a genuine XInputSetState call. Real-hardware rumble was
+        // confirmed working through a real game after this revert, using
+        // only the path below.
         if (packet.Source == HMOutputSource.XInput)
         {
             // Per HMOutputPacket.cs's own doc comment (not a guess this

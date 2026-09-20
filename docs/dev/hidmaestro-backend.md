@@ -111,6 +111,45 @@ directamente en vez de `Windows.Gaming.Input`, como control positivo real
 según su propia evidencia — ya no puede probar los motores de gatillo (el
 XInput clásico ni siquiera tiene ese concepto).
 
+## Actualización (2026-09-20): revertido el manejo de HidOutput, y contraste con libvirtualhid
+
+Dos cosas más el mismo día:
+
+**1. Se revirtió el manejo de `HidOutput` en `HandleOutputReceived()`.**
+Ese código (añadido en la actualización anterior, basado en la captura de
+Steam `00 00 00 00 FF 00 EB`) asumía que ese paquete era rumble real con
+valores casualmente en cero. Pero la propia investigación de WGI de
+HIDMaestro (arriba) describe paquetes de sonda/control con forma muy
+similar (`00 0D 00 00 01`, `00 00 00 00 02`) que **nunca llevan datos de
+motor reales** — y Steam casi seguro habla con este dispositivo vía WGI.
+Tratar esa captura como rumble real arriesgaba mandar un evento
+`rumble: 0,0` cada vez que WGI sondea el dispositivo, pudiendo pisar un
+valor real que acabara de llegar por XInput. Revertido — solo queda el
+camino `XInput` (5 bytes, documentado, confirmado con un juego real). El
+logging `[diag]` se mantiene.
+
+**2. Se contrastó la conclusión de "límite arquitectónico" con
+`libvirtualhid`** (la librería de LizardByte, ver la sección de más abajo
+"Alternativa investigada"), a petición del usuario, que recordaba su
+soporte de vibración háptica como contraejemplo. Revisando su código
+fuente real de Windows (`libvirtualhid_xbox360_umdf.cpp`): usa **VHF**
+(Virtual HID Framework de Microsoft) además de su companion UMDF2 XUSB —
+una diferencia arquitectónica real frente al driver a medida de
+HIDMaestro. Pero su función de rumble (`queue_rumble_output`) solo tiene
+dos parámetros (motor principal izquierdo/derecho, igual que XInput
+clásico) — ninguna gestión de motores de gatillo en absoluto. Búsqueda en
+todo su repo de "xbox_one", "xbox_series" o "impulse" en cualquier fichero
+de Windows: **cero resultados**. Su único trabajo confirmado de gatillos
+de impulso está titulado explícitamente "**Linux**: support Xbox Impulse
+Triggers" (issue #109, cerrado) — nunca Windows.
+
+**Conclusión revisada**: no hay contradicción real. Lo que `libvirtualhid`
+confirma funcionando en Windows es la misma categoría de rumble que
+HIDMaestro ya tiene ahora (motores principales) — no gatillos de impulso.
+Ningún proyecto ha confirmado ni implementado gatillos de impulso en
+Windows para un mando sin driver en modo kernel. La conclusión original se
+mantiene, ahora con más respaldo cruzado en vez de menos.
+
 ## Corrección importante (2026-09-16): el rumble de gatillos no está confirmado NI descartado
 
 Una versión anterior de este documento afirmaba, citando la investigación
