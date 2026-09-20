@@ -134,10 +134,15 @@ real). Detalle: `docs/dev/frame-pacing.md`.
 
 **Estado**: no se pudo compilar ni ejecutar en el entorno de desarrollo
 Linux (Windows-only, necesita .NET 10 SDK + Visual Studio) — compilado y
-validado en CI de Windows, y confirmado funcional por el usuario en
-hardware real antes de fusionar a `master`. Ver el aviso al principio de
-`docs/dev/hidmaestro-backend.md` para la historia completa del
-desarrollo (incluye dos correcciones de rumbo importantes).
+validado en CI de Windows. En hardware real: sticks, botones y **rumble
+principal confirmados funcionando** (tras corregir una inversión de eje Y
+y, después, un bug real donde solo se aceptaba una fuente de evento de
+salida distinta a la que de verdad usan los juegos). El rumble de
+**gatillos** no se detecta — confirmado como límite arquitectónico real
+de Windows.Gaming.Input con mandos virtuales sin driver en modo kernel
+(documentado por el propio equipo de HIDMaestro), no un fallo de esta
+integración. Ver `docs/dev/hidmaestro-backend.md` para la historia
+completa del desarrollo.
 
 ## `feature/adaptive-bitrate` (mergeado en `master`, 1.1.0)
 

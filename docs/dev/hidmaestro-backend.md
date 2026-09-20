@@ -97,6 +97,15 @@ es algo que se pueda arreglar iterando en `hidmaestro-bridge.exe` — es un
 límite de la arquitectura de Windows/HIDMaestro, documentado por su
 propio equipo tras una investigación exhaustiva.
 
+**Confirmado por el usuario en un juego real (2026-09-20, mismo día)**:
+el rumble principal **funciona correctamente**. Los gatillos, como se
+predijo arriba, no se detectan — consistente con el límite de WGI, no un
+fallo nuestro. Con esto, el objetivo funcional mínimo de esta feature
+(rumble real donde antes no había ninguno con ViGEm) queda confirmado
+end-to-end en hardware real; el de gatillos queda documentado como
+limitación conocida y probablemente permanente mientras el mando siga
+enumerado bajo ROOT sin driver en modo kernel.
+
 `tools/gamepad-vibration-test/` se reescribió para usar `XInputSetState`
 directamente en vez de `Windows.Gaming.Input`, como control positivo real
 según su propia evidencia — ya no puede probar los motores de gatillo (el
