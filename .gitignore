@@ -31,6 +31,12 @@
 *.out
 *.app
 
+# Vendored SudoVDA driver assets (Apollo fork addition): real signed binaries
+# extracted from an official Apollo release, not build output - see
+# cmake/packaging/windows.cmake for why these two specifically are checked in.
+!src_assets/windows/drivers/sudovda/SudoVDA.dll
+!src_assets/windows/drivers/sudovda/nefconc.exe
+
 # JetBrains IDE
 .idea/
 
