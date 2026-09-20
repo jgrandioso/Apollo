@@ -1,0 +1,47 @@
+name: Build Linux (fork)
+
+# Disparo manual desde la pestaña "Actions", igual que build-windows.yml.
+# Reutiliza directamente el mismo docker/debian-trixie.dockerfile que ya
+# usamos en local para validar - la unica diferencia es que corre en un
+# runner de GitHub con RAM/disco dedicados, en vez de competir con el resto
+# de servicios de este servidor (motivo real: un build local se quedo sin
+# memoria por el pico de paralelismo de gcc, no por falta de espacio).
+on:
+  workflow_dispatch:
+    inputs:
+      build_label:
+        description: 'Etiqueta para el build (aparece en el nombre de la imagen)'
+        required: false
+        default: 'fork'
+
+permissions:
+  contents: read
+
+jobs:
+  build_linux:
+    name: Debian-Trixie-Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -f docker/debian-trixie.dockerfile \
+            -t apollo-fork:${{ inputs.build_label }} \
+            .
+
+      - name: Smoke test - container starts and responds
+        run: |
+          docker run -d --name apollo-test apollo-fork:${{ inputs.build_label }}
+          sleep 5
+          docker logs apollo-test
+          docker inspect apollo-test --format '{{.State.Status}}'
+          if [ "$(docker inspect apollo-test --format '{{.State.Status}}')" != "running" ]; then
+            echo "::error::El contenedor no sigue corriendo tras 5s"
+            exit 1
+          fi
+          docker stop apollo-test
