@@ -42,8 +42,11 @@ bitrate ya ajustado por Warp Mode).
 - `nvenc_base::reconfigure_bitrate()` — usa `NvEncReconfigureEncoder`
   (API real de NVIDIA, cabecera vendorizada en `third-party/nv-codec-headers/`)
   para cambiar el bitrate sin destruir la sesión.
-- Web UI (`DisplayModesSettings.vue`), `config.html`, `en.json`,
-  `configuration.md` — los dos flags expuestos y documentados.
+- Web UI (`NvidiaNvencEncoder.vue`), `config.html`, `en.json`,
+  `configuration.md` — los dos flags expuestos y documentados. Viven en
+  la pestaña propia del encoder NVIDIA NVENC, no en Audio/Video general,
+  ya que solo funcionan con ese encoder (2026-09-20, movidos de
+  `DisplayModesSettings.vue` tras confusión sobre dónde vivían).
 
 Nada de esto toca la ruta de los encoders vía ffmpeg (software, VA-API,
 QuickSync, AMD AMF) — quedan sin esta feature en este MVP, tal como se
@@ -88,9 +91,9 @@ multiplataforma** — se compiló de verdad en el Docker de Linux, incluido
 
 ## Cómo activar/probar una vez compilado en el host real (con GPU NVIDIA)
 
-1. Web UI → pestaña **Audio/Video** → activar **"Adaptive Bitrate"**, y
-   ajustar **"Adaptive Bitrate Floor (%)"** si el 50% por defecto no
-   encaja.
+1. Web UI → pestaña **NVIDIA NVENC Encoder** → activar
+   **"Adaptive Bitrate"**, y ajustar **"Adaptive Bitrate Floor (%)"** si
+   el 50% por defecto no encaja.
 2. Iniciar un stream real. Con red estable no debería notarse ningún
    cambio (el multiplicador se queda en 1.0).
 3. Para provocar el ajuste: degradar la red del cliente a propósito (ej.
