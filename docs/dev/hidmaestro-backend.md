@@ -60,6 +60,48 @@ de 13 bytes ya usado), no una confirmación — si el rumble llega pero al
 motor equivocado, hace falta una captura con valores distintos de cero
 para corregir el orden. El logging `[diag]` se mantiene por si acaso.
 
+## Actualización (2026-09-20): límite arquitectónico real de Windows, no un bug nuestro
+
+Tras el fix anterior, una prueba con `Windows.Gaming.Input.Gamepad.Vibration`
+(vía una herramienta de test hecha para esta sesión) seguía sin producir
+ningún byte de motor real — el paquete capturado seguía siendo el mismo
+`00000000FF00EB` de siempre, sin importar qué intensidad se pidiera.
+
+Investigando el propio repo de HIDMaestro se encontró
+`docs/investigations/wgi-silent-sink-2026-04/` — una investigación suya,
+extensa y ya cerrada con conclusión firme, que confirma exactamente este
+problema: **`Windows.Gaming.Input.Gamepad.put_Vibration` (y todo lo que
+se construye encima: GameInput, la vibración de navegadores tipo Chrome/
+Edge, y muy probablemente el test de vibración de Steam) nunca entrega
+bytes de motor a un mando virtual enumerado bajo ROOT** como el de
+HIDMaestro. La sonda de enumeración llega bien al driver, pero el
+despacho real de vibración está condicionado a que el dispositivo tenga
+un padre USB real — algo que un mando virtual sin driver en modo kernel,
+por diseño de HIDMaestro, no puede tener. Confirmado por el propio equipo
+de HIDMaestro con reportes a Microsoft; no es algo arreglable desde nuestro
+lado (bridge o Apollo).
+
+**La vía que sí funciona, según su misma investigación**: `XInputSetState`
+clásico (`xinput1_4.dll`, la API que usan la mayoría de juegos de PC para
+rumble) **sí llega correctamente** a este mismo mando virtual — ya
+verificado por ellos. Es exactamente el camino que ya arreglamos antes en
+este mismo documento (`HMOutputSource.XInput`, formato de 5 bytes).
+
+**Consecuencia importante**: el rumble de gatillos (impulse triggers) —
+la razón original de usar HIDMaestro en vez de ViGEm — depende
+exclusivamente de WGI/GameInput, que es justo el camino confirmado
+bloqueado. El rumble principal (motores izquierdo/derecho) debería
+funcionar en juegos que usan XInput clásico; el de gatillos, con este
+mando enumerado bajo ROOT, muy probablemente **no funciona nunca**, y no
+es algo que se pueda arreglar iterando en `hidmaestro-bridge.exe` — es un
+límite de la arquitectura de Windows/HIDMaestro, documentado por su
+propio equipo tras una investigación exhaustiva.
+
+`tools/gamepad-vibration-test/` se reescribió para usar `XInputSetState`
+directamente en vez de `Windows.Gaming.Input`, como control positivo real
+según su propia evidencia — ya no puede probar los motores de gatillo (el
+XInput clásico ni siquiera tiene ese concepto).
+
 ## Corrección importante (2026-09-16): el rumble de gatillos no está confirmado NI descartado
 
 Una versión anterior de este documento afirmaba, citando la investigación
