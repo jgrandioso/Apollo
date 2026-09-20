@@ -660,13 +660,26 @@ namespace platf {
       // ki.wScan at 0 so the fallthrough below sends a plain VK event instead -
       // see is_symbol_or_digit_key() above. Everything else (letters,
       // navigation, function keys) keeps using the table exactly as before.
-      if (!(is_symbol_or_digit_key(modcode) && host_layout_is_non_us())) {
+      bool is_symbol = is_symbol_or_digit_key(modcode);
+      bool use_vk_event = is_symbol && host_layout_is_non_us();
+      // Diagnostic-only (debug log level): helps confirm whether this path is
+      // actually being taken for a given key, since it can't be exercised on
+      // Linux dev hardware. See docs/dev/keyboard-symbol-layout.md.
+      BOOST_LOG(debug) << "keyboard_update: modcode="sv << modcode
+                        << " normalized=true is_symbol_or_digit=" << is_symbol
+                        << " use_vk_event=" << use_vk_event
+                        << " -> " << (use_vk_event ? "VK event (layout-aware)"sv : "scancode (US table)"sv);
+      if (!use_vk_event) {
         // Mask off the extended key byte
         ki.wScan = VK_TO_SCANCODE_MAP[modcode & 0xFF];
       }
-    } else if (config::input.always_send_scancodes && modcode != VK_LWIN && modcode != VK_RWIN && modcode != VK_PAUSE) {
-      // For some reason, MapVirtualKey(VK_LWIN, MAPVK_VK_TO_VSC) doesn't seem to work :/
-      ki.wScan = MapVirtualKey(modcode, MAPVK_VK_TO_VSC);
+    } else {
+      BOOST_LOG(debug) << "keyboard_update: modcode="sv << modcode
+                        << " normalized=false always_send_scancodes=" << config::input.always_send_scancodes;
+      if (config::input.always_send_scancodes && modcode != VK_LWIN && modcode != VK_RWIN && modcode != VK_PAUSE) {
+        // For some reason, MapVirtualKey(VK_LWIN, MAPVK_VK_TO_VSC) doesn't seem to work :/
+        ki.wScan = MapVirtualKey(modcode, MAPVK_VK_TO_VSC);
+      }
     }
 
     // If we can map this to a scancode, send it as a scancode for maximum game compatibility.
