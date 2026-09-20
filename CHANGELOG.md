@@ -61,6 +61,20 @@ de cada uno.
   `thread_local`, con cuidado explícito de no filtrar bytes del frame
   anterior en la cabecera. Sin cambio de comportamiento observable,
   verificado compilando en Linux y Windows.
+- **Símbolos de teclado equivocados en hosts con layout no-US** (`src/platform/windows/input.cpp`):
+  conectando desde clientes que no pueden mapear limpiamente una tecla a
+  layout US (confirmado con Moonlight para iOS), símbolos como `@`
+  salían como el carácter equivocado (`"` en vez de `@` en un host
+  español) — el cliente manda el combo VK+modificador que produciría el
+  carácter deseado en un teclado US, marcado como "no normalizado", y
+  Windows lo resolvía a través del layout real del host en vez del
+  carácter que el usuario realmente quería. Para ese caso concreto
+  (teclas de símbolo/dígito, host no-US), se recupera el carácter
+  interpretando el combo bajo un layout US real y se inyecta
+  directamente como Unicode. Confirmado por el usuario en hardware real
+  (iPad + host Windows en español) — primer bug de esta sesión validado
+  end-to-end, no solo compilado. Detalle en
+  `docs/dev/keyboard-symbol-layout.md`.
 
 ### Añadido
 - **CI en GitHub Actions** (`.github/workflows/build-windows.yml`,
