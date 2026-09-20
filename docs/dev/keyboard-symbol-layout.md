@@ -65,6 +65,66 @@ en un host con layout no-US. Se consideró improbable — las teclas de
 puntuación casi nunca se usan como bind de gameplay - y es la razón por
 la que el fix no se aplicó a todas las teclas sin más.
 
+## Actualización (2026-09-20): el primer fix no era suficiente
+
+El fix de arriba solo tocaba la rama "normalizada" de `keyboard_update()`.
+El usuario probó en hardware real (iPad + host Windows en español) y
+`@` seguía saliendo como `"`. Con logging de diagnóstico añadido
+(`min_log_level=debug`) se confirmó el paquete real que manda Moonlight
+para iOS al pulsar `@`:
+
+```
+keyCode [0032]   (VK_2)
+modifiers [01]   (Shift)
+flags [01]       (SS_KBE_FLAG_NON_NORMALIZED)
+```
+
+Es decir: la tecla llega marcada **no normalizada**, no normalizada —
+justo la rama que el primer fix no tocaba. Documentación real del
+protocolo (`Limelight.h`, comentario sobre `SS_KBE_FLAG_NON_NORMALIZED`):
+*"allows the client to inform the host that the keycode was not mapped
+to a standard US English scancode and should be interpreted as-is"*.
+
+En la práctica, para este cliente concreto, "interpretar tal cual"
+significa: Moonlight para iOS, cuando no puede identificar limpiamente
+una tecla de su propio teclado, manda el combo VK+modificador que
+produciría el carácter deseado **en un teclado US** (aquí, Shift+2 para
+`@`) con el flag puesto para avisar de que es una suposición de baja
+confianza. Con `always_send_scancodes` desactivado (como lo tenía el
+usuario), Apollo ya mandaba esto como evento VK simple — pero eso
+**tampoco** arregla nada, porque Windows sigue resolviendo "VK_2 +
+Shift" a través del layout activo del host (español), dando `"` en vez
+de `@`. El problema no es scancode-vs-VK, es que el combo que llega ya
+es intrínsecamente "US-shaped" y no hay forma de producir `@` con
+Shift+2 en un teclado español (ahí `@` es AltGr+2).
+
+### El segundo fix
+
+Cuando la tecla no normalizada es de símbolo/dígito y el host no está
+en layout US: se interpreta `modcode` como si fuera una pulsación en un
+layout US real (cargado vía `LoadKeyboardLayoutW` sin cambiar el layout
+visible del usuario), usando los modificadores que estén sujetos en
+ese momento (`GetKeyState`, ya reflejan lo que el propio Apollo
+sintetizó para cumplir lo que pedía el paquete del cliente). Eso
+recupera el carácter que el cliente realmente quería (`@`). Ese
+carácter se inyecta directamente como evento Unicode
+(`KEYEVENTF_UNICODE`) en vez de reconstruir manualmente qué combo de
+teclas produce `@` en el layout real del host — así no hace falta
+pelear con los modificadores que el propio cliente/Apollo ya haya
+pulsado (Shift, en este caso), que de otro modo podrían combinarse mal
+con lo que hiciera falta inyectar (AltGr) si se intentase un enfoque de
+"reescribir a la combinación correcta del host".
+
+**Nivel de confianza**: alto en el diagnóstico (confirmado con el log
+real del usuario), medio en la solución. El mecanismo de
+"interpretar como si fuera US, luego reinyectar como Unicode" es sólido
+en principio y encaja con la única evidencia real disponible, pero solo
+se ha confirmado para **un cliente** (Moonlight iOS) y **un carácter**
+(`@`/Shift+2). No hay garantía de que el cliente use consistentemente
+"el combo US" como su representación de baja confianza para *todos*
+los símbolos no identificables - es una inferencia a partir de un caso,
+no un contrato documentado del protocolo.
+
 ## Qué NO se pudo validar aquí
 
 Todo esto es código exclusivo de Windows
@@ -75,17 +135,29 @@ de desarrollo Linux. Sin confirmar en Windows real:
 1. Que `GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), ...))`
    realmente refleje el layout que ve el usuario en la práctica (debería,
    es la API estándar de Windows para esto, pero no se ha probado).
-2. Que el fix realmente arregle `@`, `"`, `/`, `¿`, `¡` conectando desde
-   el iPad reportado por el usuario - la causa raíz se dedujo leyendo el
-   código y contrastando con los síntomas descritos, no se reprodujo el
-   bug en un entorno real.
-3. Que ningún juego probado por el usuario dependa de un scancode de
+2. Que ningún juego probado por el usuario dependa de un scancode de
    símbolo/dígito para un bind - el riesgo se consideró bajo pero no se
    verificó activamente.
+3. (Segundo fix) Que `resolve_char_via_us_layout()` produzca el
+   carácter correcto para símbolos distintos de `@` (`"`, `/`, `¿`, `¡`)
+   - solo se confirmó con logs reales el caso `@`/Shift+2. Si Moonlight
+   iOS usa una lógica distinta para otros símbolos (p. ej. AltGr en vez
+   de Shift para alguno), el fix podría no cubrir ese caso.
+4. Que `ToUnicodeEx()` con un `HKL` distinto al activo no tenga efectos
+   secundarios raros con el estado de "dead key" del hilo - no debería
+   importar para teclas simples de dígito/OEM (ninguna es dead key en
+   layout US), pero no se ha confirmado en Windows real.
+5. Que la inyección Unicode (`KEYEVENTF_UNICODE`) funcione igual de bien
+   que la inyección por VK/scancode dentro de un juego - debería, ya
+   que solo se usa para teclas de símbolo/dígito no normalizadas en
+   host no-US, un caso donde el VK/scancode ya estaba produciendo el
+   carácter equivocado de todas formas.
 
 ## Cómo probar una vez compilado en Windows
 
-1. Host en Windows con layout español (u otro no-US) activo.
+1. Host en Windows con layout español (u otro no-US) activo, con
+   `min_log_level` en Debug para poder ver las líneas
+   `keyboard_update: ...` si algo no sale como se espera.
 2. Conectar desde el cliente que reportó el problema (iPad/Moonlight
    iOS) y escribir en un campo de texto normal (no un juego) los
    símbolos que antes salían mal: `@`, `"`, `/`, `¿`, `¡`.
