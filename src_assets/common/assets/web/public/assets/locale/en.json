@@ -153,6 +153,8 @@
     "amd_coder_desc": "Allows you to select the entropy encoding to prioritize quality or encoding speed. H.264 only.",
     "amd_enforce_hrd": "AMF Hypothetical Reference Decoder (HRD) Enforcement",
     "amd_enforce_hrd_desc": "Increases the constraints on rate control to meet HRD model requirements. This greatly reduces bitrate overflows, but may cause encoding artifacts or reduced quality on certain cards.",
+    "amd_high_motion_quality_boost": "AMF High Motion Quality Boost",
+    "amd_high_motion_quality_boost_desc": "Improves perceived quality during fast motion (e.g. quick camera pans, fast-paced action), which is otherwise one of the harder cases for the encoder's rate control. May cost some encoding throughput/latency in exchange. Unset by default (uses the encoder's own default).",
     "amd_preanalysis": "AMF Preanalysis",
     "amd_preanalysis_desc": "This enables rate-control preanalysis, which may increase quality at the expense of increased encoding latency.",
     "amd_quality": "AMF Quality",

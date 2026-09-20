@@ -2871,6 +2871,35 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### amd_high_motion_quality_boost
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Improves perceived quality during fast motion (quick camera pans,
+            fast-paced action) - one of the harder cases for rate control to handle
+            well. May cost some encoding throughput/latency in exchange.
+            @note{This option only applies when using amdvce [encoder](#encoder).
+            Maps to AMD AMF's <code>*_HIGH_MOTION_QUALITY_BOOST*</code> property
+            (H264/HEVC/AV1), confirmed as a dynamic property in AMD's own SDK
+            headers.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            amd_high_motion_quality_boost = enabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### amd_coder
 
 <table>

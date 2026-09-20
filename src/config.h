@@ -69,6 +69,7 @@ namespace config {
       std::optional<int> amd_quality_av1;
       std::optional<int> amd_preanalysis;
       std::optional<int> amd_vbaq;
+      std::optional<int> amd_high_motion_quality_boost;  ///< Apollo extension: maps to ffmpeg's high_motion_quality_boost_enable AVOption (AMF's *_HIGH_MOTION_QUALITY_BOOST* property), h264/hevc/av1_amf only. Unset = encoder default.
       int amd_coder;
     } amd;
 
