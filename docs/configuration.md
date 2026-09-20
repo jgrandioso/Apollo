@@ -309,6 +309,53 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### input_backend
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Which library Apollo uses to create virtual gamepads, on Windows.
+            <code>vigem</code> is the standard choice, using ViGEmBus like
+            upstream Sunshine. <code>hidmaestro</code> uses
+            [HIDMaestro](https://github.com/hifihedgehog/HIDMaestro) instead,
+            emulating an Xbox Series X|S controller with trigger rumble
+            (impulse triggers) support, which ViGEmBus's Xbox 360 emulation
+            structurally cannot provide.
+            @attention{The <code>hidmaestro</code> backend requires
+            <code>tools/hidmaestro-bridge.exe</code> to be present (only
+            built when Apollo is compiled with
+            <code>-DSUNSHINE_ENABLE_HIDMAESTRO=ON</code>) and .NET 10 to be
+            installed on the host. If the bridge can't start, gamepad
+            support is unavailable for that session - see
+            docs/dev/hidmaestro-backend.md for setup and current
+            limitations, most of which are unverified pending a real
+            Windows test.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            vigem
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            input_backend = hidmaestro
+            @endcode</td>
+    </tr>
+    <tr>
+        <td rowspan="2">Choices</td>
+        <td>vigem</td>
+        <td>Standard ViGEmBus-based gamepad emulation (default)</td>
+    </tr>
+    <tr>
+        <td>hidmaestro</td>
+        <td>HIDMaestro-based Xbox Series X|S emulation with trigger rumble</td>
+    </tr>
+</table>
+
 ### gamepad
 
 <table>
@@ -1060,6 +1107,38 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### virtual_display_duplicate_primary
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Apollo extension. When a client uses the virtual display, put it in Windows
+            duplicate/clone mode with the current primary display instead of adding it as a
+            separate extended display, at the resolution the client requested. Mutually
+            exclusive with `isolated_virtual_display_option` - enabling one disables the other,
+            both in the Web UI and (if the config file is hand-edited) at runtime.
+            @note{Applies to Windows only.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}enabled@endcode</td>
+    </tr>
+    <tr>
+        <th>Value</th>
+        <th>Action</th>
+    </tr>
+    <tr>
+        <td>disabled</td>
+        <td>Add the virtual display as a separate extended display, same as upstream Apollo</td>
+    </tr>
+    <tr>
+        <td>enabled</td>
+        <td>Duplicate the virtual display with the primary display, at the client's requested resolution</td>
+    </tr>
+</table>
+
 
 ### dd_configuration_option
 
@@ -1462,6 +1541,69 @@ editing the `conf` file in a text editor. Use the examples as reference.
     <tr>
         <td>1-1000</td>
         <td>Specify your own value. The real minimum may differ from this value.</td>
+    </tr>
+</table>
+
+### adaptive_bitrate
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            When enabled, Apollo reacts to packet loss reported by the client
+            (Moonlight already sends this periodically; without this option it is
+            logged and discarded) by temporarily lowering the video bitrate.
+            @attention{NVIDIA/NVENC only. Other encoders (software, VA-API,
+            QuickSync, AMD AMF) don't support changing the bitrate of an
+            already-running encode session, so this option has no effect for them.}
+            The adjustment is applied on top of whatever bitrate Warp Mode already
+            computed, not instead of it, and scales back up automatically as loss
+            subsides. See docs/dev/adaptive-bitrate-analysis.md for how the network
+            condition is estimated (including why it's an approximation of jitter,
+            not a real measurement) and what remains unverified pending real-world
+            testing.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            adaptive_bitrate = enabled
+            @endcode</td>
+    </tr>
+</table>
+
+### adaptive_bitrate_floor_pct
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            When `adaptive_bitrate` is enabled, the bitrate is never scaled down
+            below this percentage of the originally configured value (after any
+            Warp Mode adjustment), no matter how bad the connection gets.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            50
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">10-100</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            adaptive_bitrate_floor_pct = 50
+            @endcode</td>
     </tr>
 </table>
 

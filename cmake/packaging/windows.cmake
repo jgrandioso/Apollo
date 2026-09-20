@@ -22,6 +22,14 @@ install(FILES ${VIGEMBUS_INSTALLER}
 install(TARGETS dxgi-info RUNTIME DESTINATION "tools" COMPONENT dxgi)
 install(TARGETS audio-info RUNTIME DESTINATION "tools" COMPONENT audio)
 
+# hidmaestro-bridge.exe (input_backend=hidmaestro) - only built/installed when
+# SUNSHINE_ENABLE_HIDMAESTRO was passed to cmake; see cmake/targets/windows.cmake.
+if(SUNSHINE_ENABLE_HIDMAESTRO)
+    install(DIRECTORY "${HIDMAESTRO_BRIDGE_PUBLISH_DIR}/"
+            DESTINATION "tools"
+            COMPONENT hidmaestro)
+endif()
+
 # Mandatory tools
 install(TARGETS sunshinesvc RUNTIME DESTINATION "tools" COMPONENT application)
 

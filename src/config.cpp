@@ -514,12 +514,16 @@ namespace config {
     0,  // max_bitrate
     0,  // minimum_fps_target (0 = framerate)
 
+    false,  // adaptive_bitrate
+    50,  // adaptive_bitrate_floor_pct
     25.0,  // frame_pacing_tolerance_pct (matches previous hardcoded 1/4)
     false,  // frame_pacing_smooth_bursts
 
     "1920x1080x60",  // fallback_mode
     false, // isolated Display
     false, // ignore_encoder_probe_failure
+
+    true,  // virtual_display_duplicate_primary
   };
 
   audio_t audio {
@@ -567,6 +571,7 @@ namespace config {
       platf::supported_gamepads(nullptr).front().name.data(),
       platf::supported_gamepads(nullptr).front().name.size(),
     },  // Default gamepad
+    "vigem"s,  // input_backend (default preserves current behavior)
     true,  // back as touchpad click enabled (manual DS4 only)
     true,  // client gamepads with motion events are emulated as DS4
     true,  // client gamepads with touchpads are emulated as DS4
@@ -1211,12 +1216,15 @@ namespace config {
     int_f(vars, "max_bitrate", video.max_bitrate);
     double_between_f(vars, "minimum_fps_target", video.minimum_fps_target, {0.0, 1000.0});
 
+    bool_f(vars, "adaptive_bitrate", video.adaptive_bitrate);
+    int_between_f(vars, "adaptive_bitrate_floor_pct", video.adaptive_bitrate_floor_pct, {10, 100});
     double_between_f(vars, "frame_pacing_tolerance_pct", video.frame_pacing_tolerance_pct, {5.0, 100.0});
     bool_f(vars, "frame_pacing_smooth_bursts", video.frame_pacing_smooth_bursts);
 
     string_f(vars, "fallback_mode", video.fallback_mode);
     bool_f(vars, "isolated_virtual_display_option", video.isolated_virtual_display_option);
     bool_f(vars, "ignore_encoder_probe_failure", video.ignore_encoder_probe_failure);
+    bool_f(vars, "virtual_display_duplicate_primary", video.virtual_display_duplicate_primary);
 
     path_f(vars, "pkey", nvhttp.pkey);
     path_f(vars, "cert", nvhttp.cert);
@@ -1286,6 +1294,7 @@ namespace config {
     }
 
     string_restricted_f(vars, "gamepad"s, input.gamepad, get_supported_gamepad_options());
+    string_restricted_f(vars, "input_backend"s, input.input_backend, {"vigem"sv, "hidmaestro"sv});
     bool_f(vars, "ds4_back_as_touchpad_click", input.ds4_back_as_touchpad_click);
     bool_f(vars, "motion_as_ds4", input.motion_as_ds4);
     bool_f(vars, "touchpad_as_ds4", input.touchpad_as_ds4);

@@ -327,6 +327,163 @@ std::wstring getPrimaryDisplay() {
 	return primaryDeviceName;
 }
 
+// Apollo fork addition: puts the virtual display into Windows duplicate/clone
+// mode with the current primary display, instead of leaving it as a separate
+// extended display (the only mode this file otherwise creates). Windows
+// represents a clone group at the DISPLAYCONFIG_PATH_INFO level as multiple
+// paths sharing one sourceInfo (same adapterId+id) with different targetInfo -
+// same QueryDisplayConfig/SetDisplayConfig pattern already used by
+// changeDisplaySettings2 above, just repointing sourceInfo instead of moving
+// sourceMode.position. NOT verified on real hardware - see
+// docs/dev/virtual-display-duplicate-analysis.md for what's confirmed vs
+// assumed, especially whether Windows accepts an independent resolution on a
+// clone target rather than forcing one shared mode.
+LONG duplicateWithPrimaryDisplay(const wchar_t* deviceName, int width, int height, int refresh_rate) {
+	std::wstring primaryDeviceName = getPrimaryDisplay();
+	if (primaryDeviceName.empty()) {
+		wprintf(L"[SUDOVDA] Could not determine primary display, skipping duplicate mode.\n");
+		return ERROR_INVALID_PARAMETER;
+	}
+	if (primaryDeviceName == deviceName) {
+		// Shouldn't normally happen (the virtual display is never the primary),
+		// but nothing to duplicate with if it somehow is.
+		wprintf(L"[SUDOVDA] Virtual display is already primary, skipping duplicate mode.\n");
+		return ERROR_SUCCESS;
+	}
+
+	UINT32 pathCount = 0;
+	UINT32 modeCount = 0;
+	if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount)) {
+		wprintf(L"[SUDOVDA] Failed to query display configuration size.\n");
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	std::vector<DISPLAYCONFIG_PATH_INFO> pathArray(pathCount);
+	std::vector<DISPLAYCONFIG_MODE_INFO> modeArray(modeCount);
+
+	if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, pathArray.data(), &modeCount, modeArray.data(), nullptr) != ERROR_SUCCESS) {
+		wprintf(L"[SUDOVDA] Failed to query display configuration.\n");
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	int virtualPathIndex = -1;
+	int primaryPathIndex = -1;
+
+	for (UINT32 i = 0; i < pathCount; i++) {
+		DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName = {};
+		sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+		sourceName.header.size = sizeof(sourceName);
+		sourceName.header.adapterId = pathArray[i].sourceInfo.adapterId;
+		sourceName.header.id = pathArray[i].sourceInfo.id;
+
+		if (DisplayConfigGetDeviceInfo(&sourceName.header) != ERROR_SUCCESS) {
+			continue;
+		}
+
+		if (std::wstring_view(sourceName.viewGdiDeviceName) == std::wstring_view(deviceName)) {
+			virtualPathIndex = (int) i;
+		} else if (std::wstring_view(sourceName.viewGdiDeviceName) == std::wstring_view(primaryDeviceName)) {
+			primaryPathIndex = (int) i;
+		}
+	}
+
+	if (virtualPathIndex < 0 || primaryPathIndex < 0) {
+		wprintf(L"[SUDOVDA] Could not find both the virtual and primary displays among active paths, skipping duplicate mode.\n");
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	// Find the mode entry backing the primary's source - this becomes the
+	// shared source for both paths once the virtual display is repointed at it.
+	auto* primarySourceInfo = &pathArray[primaryPathIndex].sourceInfo;
+	int primaryModeIndex = -1;
+	for (UINT32 j = 0; j < modeCount; j++) {
+		if (
+			modeArray[j].infoType == DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE &&
+			modeArray[j].adapterId.HighPart == primarySourceInfo->adapterId.HighPart &&
+			modeArray[j].adapterId.LowPart == primarySourceInfo->adapterId.LowPart &&
+			modeArray[j].id == primarySourceInfo->id
+		) {
+			primaryModeIndex = (int) j;
+			break;
+		}
+	}
+
+	if (primaryModeIndex < 0) {
+		wprintf(L"[SUDOVDA] Could not find the primary display's source mode, skipping duplicate mode.\n");
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	// The actual duplicate/clone mechanism: point the virtual display's path at
+	// the same source as the primary display's path instead of its own
+	// independent one. The virtual display's own previous source mode entry is
+	// left in modeArray unreferenced by any path afterward - assumed harmless
+	// (SetDisplayConfig is not known to require every mode entry to be
+	// referenced), not confirmed on real hardware.
+	pathArray[virtualPathIndex].sourceInfo.adapterId = primarySourceInfo->adapterId;
+	pathArray[virtualPathIndex].sourceInfo.id = primarySourceInfo->id;
+
+	// Project decision: the virtual display's requested resolution wins on the
+	// now-shared source, even if that also resizes the physical primary
+	// display to match, rather than keeping the primary's own resolution.
+	modeArray[primaryModeIndex].sourceMode.width = width;
+	modeArray[primaryModeIndex].sourceMode.height = height;
+	pathArray[virtualPathIndex].targetInfo.refreshRate = {(UINT32) refresh_rate, 1000};
+
+	LONG status = SetDisplayConfig(
+		pathCount,
+		pathArray.data(),
+		modeCount,
+		modeArray.data(),
+		SDC_APPLY
+		| SDC_USE_SUPPLIED_DISPLAY_CONFIG
+		| SDC_SAVE_TO_DATABASE
+	);
+
+	if (status != ERROR_SUCCESS) {
+		wprintf(L"[SUDOVDA] Failed to apply duplicate display configuration.\n");
+	} else {
+		wprintf(L"[SUDOVDA] Virtual display set to duplicate primary display successfully.\n");
+	}
+
+	return status;
+}
+
+// Apollo fork addition: undoes the resolution change duplicateWithPrimaryDisplay()
+// made to the primary display. Deliberately uses the same plain DEVMODE API as
+// changeDisplaySettings()'s "baseline" step instead of redoing CCD path/mode
+// surgery - by the time this runs the virtual display has already been removed
+// (see proc_t teardown in process.cpp), so the primary is back to being a
+// normal single-path display and only its own resolution needs restoring.
+LONG restorePrimaryDisplayMode(const wchar_t* deviceName, int width, int height, int refresh_rate) {
+	DEVMODEW devMode = {};
+	devMode.dmSize = sizeof(devMode);
+
+	if (!EnumDisplaySettingsW(deviceName, ENUM_CURRENT_SETTINGS, &devMode)) {
+		wprintf(L"[SUDOVDA] Could not query current settings for %ls, skipping resolution restore.\n", deviceName);
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	if ((int) devMode.dmPelsWidth == width && (int) devMode.dmPelsHeight == height) {
+		// Already at the target resolution (e.g. it happened to match the
+		// client's, or nothing actually changed it) - nothing to do.
+		return ERROR_SUCCESS;
+	}
+
+	devMode.dmPelsWidth = width;
+	devMode.dmPelsHeight = height;
+	devMode.dmDisplayFrequency = refresh_rate;
+	devMode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
+
+	wprintf(L"[SUDOVDA] Restoring primary display %ls to [%dx%dx%d].\n", deviceName, width, height, refresh_rate);
+
+	LONG status = ChangeDisplaySettingsExW(deviceName, &devMode, NULL, CDS_UPDATEREGISTRY, NULL);
+	if (status != DISP_CHANGE_SUCCESSFUL) {
+		wprintf(L"[SUDOVDA] Failed to restore primary display resolution (error %ld).\n", status);
+	}
+
+	return status;
+}
+
 bool setPrimaryDisplay(const wchar_t* primaryDeviceName) {
 	DEVMODEW primaryDevMode{};
 	if (!getDeviceSettings(primaryDeviceName, primaryDevMode)) {

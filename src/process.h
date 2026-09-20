@@ -109,6 +109,13 @@ namespace proc {
     std::string mode_changed_display;
     bool initial_hdr = false;
     bool virtual_display = false;
+    // Apollo fork addition: only set when virtual_display_duplicate_primary
+    // actually mutated the primary display's resolution this session, so we
+    // know to restore it (and to what) once the virtual display is removed.
+    std::string duplicated_primary_display;
+    int original_primary_width = 0;
+    int original_primary_height = 0;
+    int original_primary_refresh_rate = 0;
     bool allow_client_commands = false;
 
     proc_t(

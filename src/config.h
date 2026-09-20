@@ -147,12 +147,16 @@ namespace config {
     int max_bitrate;  // Maximum bitrate, sets ceiling in kbps for bitrate requested from client
     double minimum_fps_target;  ///< Lowest framerate that will be used when streaming. Range 0-1000, 0 = half of client's requested framerate.
 
+    bool adaptive_bitrate;  ///< Apollo extension: react to client-reported packet loss by scaling the encoder bitrate down (NVENC only). Default off, zero behavior change.
+    int adaptive_bitrate_floor_pct;  ///< Never scale the (Warp Mode-adjusted) bitrate below this percent of its original value. Range 10-100.
     double frame_pacing_tolerance_pct;  ///< Percent of the ideal encode interval used as the frame-timestamp snapping tolerance. Range 5-100, default 25 (matches the previous hardcoded 1/4 behavior).
     bool frame_pacing_smooth_bursts;  ///< When enabled, spreads network transmission of frames that finish early across more of the ideal frame interval instead of always sending at the flat bandwidth ceiling.
 
     std::string fallback_mode;
     bool isolated_virtual_display_option;
     bool ignore_encoder_probe_failure;
+
+    bool virtual_display_duplicate_primary;  ///< Apollo extension: when a virtual display is created for a client, put it in Windows duplicate/clone mode with the current primary display instead of adding it as a separate extended display. Default on (unlike other extensions in this fork) - mutually exclusive with isolated_virtual_display_option, both in the Web UI and at runtime (this one wins if both are somehow true).
   };
 
   struct audio_t {
@@ -203,6 +207,7 @@ namespace config {
     std::chrono::duration<double> key_repeat_period;
 
     std::string gamepad;
+    std::string input_backend;  ///< Which gamepad backend library to use. "vigem" (default) or "hidmaestro" (Windows only). Independent of `gamepad`, which selects the emulated controller *type* within whichever backend is active.
     bool ds4_back_as_touchpad_click;
     bool motion_as_ds4;
     bool touchpad_as_ds4;

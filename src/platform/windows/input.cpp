@@ -8,13 +8,17 @@
 #include <Windows.h>
 
 // standard includes
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <iterator>
+#include <mutex>
 #include <optional>
 #include <thread>
 
 // lib includes
 #include <ViGEm/Client.h>
+#include <nlohmann/json.hpp>
 
 // local includes
 #include "keylayout.h"
@@ -442,12 +446,352 @@ namespace platf {
     task_pool.push(&vigem_t::set_rgb_led, (vigem_t *) userdata, target, led_color.Red, led_color.Green, led_color.Blue);
   }
 
+  // --- HIDMaestro backend (Apollo extension, alternative to vigem_t above) ---
+  //
+  // HIDMaestro's own SDK is C# (.NET 10) only - there is no native C/C++ API,
+  // COM interface, or documented named-pipe protocol (confirmed against
+  // https://hidmaestro.org/docs/ before writing this). So instead of linking
+  // against it directly - which would require mixing native and managed code
+  // in Apollo's own binary (C++/CLI) - Apollo launches a small companion
+  // .NET process (tools/hidmaestro-bridge.exe, built from
+  // tools/hidmaestro-bridge/ as part of this same Windows build) and talks
+  // to it over its stdin/stdout, one JSON object per line. This keeps all
+  // the managed/native interop complexity in one small, separately
+  // testable program instead of inside Apollo itself.
+  //
+  // Wire protocol (Apollo -> bridge, one JSON object per line on stdin):
+  //   {"cmd":"create_pad","id":0}
+  //   {"cmd":"set_state","id":0,"buttons":12345,"lt":0,"rt":255,"lsX":100,"lsY":-200,"rsX":0,"rsY":0}
+  //   {"cmd":"destroy_pad","id":0}
+  //   {"cmd":"shutdown"}
+  //
+  // Wire protocol (bridge -> Apollo, one JSON object per line on stdout):
+  //   {"event":"ready"}                                   (once, at startup)
+  //   {"event":"rumble","id":0,"large":128,"small":64}
+  //   {"event":"trigger_rumble","id":0,"left":128,"right":64}
+  //   {"event":"error","message":"..."}                   (diagnostics only)
+  //
+  // This whole class - and the bridge it talks to - is UNVERIFIED. None of
+  // it could be compiled or run in the Linux environment this was written
+  // in, since this file only builds as part of a Windows build. See
+  // docs/dev/hidmaestro-backend-analysis.md and hidmaestro-backend.md for
+  // exactly what's confirmed from HIDMaestro's own documentation/source vs.
+  // assumed, and what to check first when testing on a real Windows host.
+  class hidmaestro_t {
+  public:
+    struct gamepad_context_t {
+      std::uint8_t client_relative_index = 0;
+      bool active = false;
+      feedback_queue_t feedback_queue;
+    };
+
+    ~hidmaestro_t() {
+      shutdown();
+    }
+
+    /**
+     * @brief Launches the bridge process and waits (briefly) for it to report readiness.
+     * @return 0 on success, matching vigem_t::init()'s convention - a non-zero
+     *         return here means the whole hidmaestro_t object gets discarded by
+     *         input(), the same way a failed vigem_t::init() does.
+     */
+    int init() {
+      gamepads.resize(MAX_GAMEPADS);
+
+      if (!spawn_process()) {
+        BOOST_LOG(fatal) << "Couldn't start tools\\hidmaestro-bridge.exe. Is it installed alongside Apollo, and is .NET 10 installed on this machine? "sv
+                          << "Falling back to input_backend=vigem in the config would restore standard gamepad support."sv;
+        return -1;
+      }
+
+      reader_thread = std::thread(&hidmaestro_t::reader_loop, this);
+
+      // Bounded wait for the bridge's "ready" event - it needs to talk to the
+      // HIDMaestro UMDF2 driver, which can take a moment on first run. This is
+      // a simple startup diagnostic, not a real handshake: gamepad creation
+      // is attempted regardless of whether "ready" arrived in time.
+      {
+        std::unique_lock<std::mutex> lock(ready_mutex);
+        ready_cv.wait_for(lock, std::chrono::seconds(10), [this] {
+          return ready || shutting_down.load();
+        });
+      }
+
+      if (!ready) {
+        BOOST_LOG(warning) << "hidmaestro-bridge.exe did not report ready within 10 seconds; continuing anyway, but gamepad creation may fail until it does."sv;
+      }
+
+      return 0;
+    }
+
+    /**
+     * @brief Attaches a new gamepad, emulated as an Xbox Series X|S controller.
+     * @details Unlike vigem_t::alloc_gamepad_internal(), there is no gp_type
+     *          parameter - this MVP only supports the Xbox Series profile
+     *          (the whole point of using HIDMaestro instead of ViGEm is its
+     *          trigger rumble support, which only this profile models).
+     *          See docs/dev/hidmaestro-backend-analysis.md for the reasoning
+     *          behind keeping this scope narrow for now.
+     * @param id The gamepad ID.
+     * @param feedback_queue The queue for posting messages back to the client.
+     * @return 0 on success.
+     */
+    int alloc_gamepad_internal(const gamepad_id_t &id, feedback_queue_t &feedback_queue) {
+      auto &gamepad = gamepads[id.globalIndex];
+      gamepad.client_relative_index = id.clientRelativeIndex;
+      gamepad.feedback_queue = std::move(feedback_queue);
+
+      nlohmann::json cmd;
+      cmd["cmd"] = "create_pad";
+      cmd["id"] = id.globalIndex;
+      cmd["profile"] = "xbox-series-xs";
+      if (!send_line(cmd.dump())) {
+        BOOST_LOG(error) << "Couldn't send create_pad to hidmaestro-bridge.exe (pipe write failed - is the process still running?)"sv;
+        return -1;
+      }
+
+      gamepad.active = true;
+      return 0;
+    }
+
+    void free_target(int nr) {
+      auto &gamepad = gamepads[nr];
+      if (!gamepad.active) {
+        return;
+      }
+
+      nlohmann::json cmd;
+      cmd["cmd"] = "destroy_pad";
+      cmd["id"] = nr;
+      send_line(cmd.dump());
+
+      gamepad.active = false;
+      gamepad.feedback_queue.reset();
+    }
+
+    void update_state(int nr, const gamepad_state_t &state) {
+      auto &gamepad = gamepads[nr];
+      if (!gamepad.active) {
+        return;
+      }
+
+      nlohmann::json cmd;
+      cmd["cmd"] = "set_state";
+      cmd["id"] = nr;
+      cmd["buttons"] = state.buttonFlags;
+      cmd["lt"] = state.lt;
+      cmd["rt"] = state.rt;
+      cmd["lsX"] = state.lsX;
+      cmd["lsY"] = state.lsY;
+      cmd["rsX"] = state.rsX;
+      cmd["rsY"] = state.rsY;
+      send_line(cmd.dump());
+    }
+
+    std::vector<gamepad_context_t> gamepads;
+
+  private:
+    bool spawn_process() {
+      SECURITY_ATTRIBUTES sa {};
+      sa.nLength = sizeof(sa);
+      sa.bInheritHandle = TRUE;
+
+      HANDLE child_stdin_read = nullptr, child_stdin_write = nullptr;
+      HANDLE child_stdout_read = nullptr, child_stdout_write = nullptr;
+
+      if (!CreatePipe(&child_stdin_read, &child_stdin_write, &sa, 0) ||
+          !SetHandleInformation(child_stdin_write, HANDLE_FLAG_INHERIT, 0)) {
+        return false;
+      }
+      if (!CreatePipe(&child_stdout_read, &child_stdout_write, &sa, 0) ||
+          !SetHandleInformation(child_stdout_read, HANDLE_FLAG_INHERIT, 0)) {
+        CloseHandle(child_stdin_read);
+        CloseHandle(child_stdin_write);
+        return false;
+      }
+
+      STARTUPINFOW si {};
+      si.cb = sizeof(si);
+      si.dwFlags = STARTF_USESTDHANDLES;
+      si.hStdInput = child_stdin_read;
+      si.hStdOutput = child_stdout_write;
+      si.hStdError = child_stdout_write;
+
+      PROCESS_INFORMATION pi {};
+
+      // Ships next to sunshine.exe, in a "tools" subfolder - the same
+      // convention Apollo already uses for its other helper .exe's
+      // (dxgi-info.exe, audio-info.exe; see cmake/packaging/windows.cmake).
+      std::wstring cmdline = L"tools\\hidmaestro-bridge.exe";
+
+      BOOL ok = CreateProcessW(
+        nullptr,
+        cmdline.data(),
+        nullptr,
+        nullptr,
+        TRUE,  // inherit the pipe handles above
+        CREATE_NO_WINDOW,
+        nullptr,
+        nullptr,
+        &si,
+        &pi
+      );
+
+      CloseHandle(child_stdin_read);
+      CloseHandle(child_stdout_write);
+
+      if (!ok) {
+        CloseHandle(child_stdin_write);
+        CloseHandle(child_stdout_read);
+        return false;
+      }
+
+      CloseHandle(pi.hThread);
+      process_handle = pi.hProcess;
+      stdin_write = child_stdin_write;
+      stdout_read = child_stdout_read;
+      return true;
+    }
+
+    bool send_line(const std::string &json_line) {
+      if (!stdin_write) {
+        return false;
+      }
+
+      std::lock_guard<std::mutex> lock(write_mutex);
+      std::string line = json_line + "\n";
+      DWORD written = 0;
+      return WriteFile(stdin_write, line.data(), (DWORD) line.size(), &written, nullptr) && written == line.size();
+    }
+
+    void reader_loop() {
+      std::string buffer;
+      char chunk[4096];
+
+      while (!shutting_down) {
+        DWORD read = 0;
+        if (!ReadFile(stdout_read, chunk, sizeof(chunk), &read, nullptr) || read == 0) {
+          break;  // pipe closed - bridge process exited or was shut down
+        }
+
+        buffer.append(chunk, read);
+
+        size_t pos;
+        while ((pos = buffer.find('\n')) != std::string::npos) {
+          std::string line = buffer.substr(0, pos);
+          buffer.erase(0, pos + 1);
+          handle_line(line);
+        }
+      }
+
+      if (!shutting_down) {
+        BOOST_LOG(warning) << "hidmaestro-bridge.exe's output pipe closed unexpectedly (it likely crashed or was closed externally); "sv
+                            << "rumble/trigger-rumble events will stop working until Apollo is restarted."sv;
+      }
+    }
+
+    void handle_line(const std::string &line) {
+      nlohmann::json msg;
+      try {
+        msg = nlohmann::json::parse(line);
+      } catch (const std::exception &e) {
+        BOOST_LOG(warning) << "hidmaestro-bridge sent a line that wasn't valid JSON, ignoring: "sv << e.what();
+        return;
+      }
+
+      auto event = msg.value("event", std::string {});
+
+      if (event == "ready") {
+        {
+          std::lock_guard<std::mutex> lock(ready_mutex);
+          ready = true;
+        }
+        ready_cv.notify_all();
+        return;
+      }
+
+      if (event == "error") {
+        BOOST_LOG(warning) << "hidmaestro-bridge: "sv << msg.value("message", std::string {"(no message)"});
+        return;
+      }
+
+      if (event != "rumble" && event != "trigger_rumble") {
+        return;
+      }
+
+      int id = msg.value("id", -1);
+      if (id < 0 || id >= (int) gamepads.size() || !gamepads[id].active || !gamepads[id].feedback_queue) {
+        return;
+      }
+
+      auto client_idx = gamepads[id].client_relative_index;
+
+      // Values are normalized from the bridge's 0-255 range to the 0-65535
+      // range gamepad_feedback_msg_t expects, the same way vigem_t::rumble()
+      // does for ViGEm's motor values just above in this file.
+      if (event == "rumble") {
+        gamepads[id].feedback_queue->raise(gamepad_feedback_msg_t::make_rumble(
+          client_idx,
+          (std::uint16_t) msg.value("large", 0) << 8,
+          (std::uint16_t) msg.value("small", 0) << 8
+        ));
+      } else {
+        gamepads[id].feedback_queue->raise(gamepad_feedback_msg_t::make_rumble_triggers(
+          client_idx,
+          (std::uint16_t) msg.value("left", 0) << 8,
+          (std::uint16_t) msg.value("right", 0) << 8
+        ));
+      }
+    }
+
+    void shutdown() {
+      shutting_down = true;
+
+      if (stdin_write) {
+        nlohmann::json cmd;
+        cmd["cmd"] = "shutdown";
+        send_line(cmd.dump());
+        CloseHandle(stdin_write);
+        stdin_write = nullptr;
+      }
+
+      if (stdout_read) {
+        // Unblocks the reader thread's pending ReadFile() call, if any.
+        CloseHandle(stdout_read);
+        stdout_read = nullptr;
+      }
+
+      if (reader_thread.joinable()) {
+        reader_thread.join();
+      }
+
+      if (process_handle) {
+        WaitForSingleObject(process_handle, 3000);
+        CloseHandle(process_handle);
+        process_handle = nullptr;
+      }
+    }
+
+    HANDLE process_handle = nullptr;
+    HANDLE stdin_write = nullptr;
+    HANDLE stdout_read = nullptr;
+    std::thread reader_thread;
+    std::mutex write_mutex;
+
+    std::mutex ready_mutex;
+    std::condition_variable ready_cv;
+    bool ready = false;
+    std::atomic<bool> shutting_down = false;
+  };
+
   struct input_raw_t {
     ~input_raw_t() {
       delete vigem;
+      delete hidmaestro;
     }
 
     vigem_t *vigem;
+    hidmaestro_t *hidmaestro;
 
     decltype(CreateSyntheticPointerDevice) *fnCreateSyntheticPointerDevice;
     decltype(InjectSyntheticPointerInput) *fnInjectSyntheticPointerInput;
@@ -458,10 +802,20 @@ namespace platf {
     input_t result {new input_raw_t {}};
     auto &raw = *(input_raw_t *) result.get();
 
-    raw.vigem = new vigem_t {};
-    if (raw.vigem->init()) {
-      delete raw.vigem;
-      raw.vigem = nullptr;
+    raw.hidmaestro = nullptr;
+
+    if (config::input.input_backend == "hidmaestro"sv) {
+      raw.hidmaestro = new hidmaestro_t {};
+      if (raw.hidmaestro->init()) {
+        delete raw.hidmaestro;
+        raw.hidmaestro = nullptr;
+      }
+    } else {
+      raw.vigem = new vigem_t {};
+      if (raw.vigem->init()) {
+        delete raw.vigem;
+        raw.vigem = nullptr;
+      }
     }
 
     // Get pointers to virtual touch/pen input functions (Win10 1809+)
@@ -1307,6 +1661,11 @@ namespace platf {
   int alloc_gamepad(input_t &input, const gamepad_id_t &id, const gamepad_arrival_t &metadata, feedback_queue_t feedback_queue) {
     auto raw = (input_raw_t *) input.get();
 
+    if (raw->hidmaestro) {
+      BOOST_LOG(info) << "Gamepad " << id.globalIndex << " will be an Xbox Series X|S controller via HIDMaestro"sv;
+      return raw->hidmaestro->alloc_gamepad_internal(id, feedback_queue);
+    }
+
     if (!raw->vigem) {
       return 0;
     }
@@ -1360,6 +1719,11 @@ namespace platf {
 
   void free_gamepad(input_t &input, int nr) {
     auto raw = (input_raw_t *) input.get();
+
+    if (raw->hidmaestro) {
+      raw->hidmaestro->free_target(nr);
+      return;
+    }
 
     if (!raw->vigem) {
       return;
@@ -1619,7 +1983,14 @@ namespace platf {
    * @param gamepad_state The gamepad button/axis state sent from the client.
    */
   void gamepad_update(input_t &input, int nr, const gamepad_state_t &gamepad_state) {
-    auto vigem = ((input_raw_t *) input.get())->vigem;
+    auto raw = (input_raw_t *) input.get();
+
+    if (raw->hidmaestro) {
+      raw->hidmaestro->update_state(nr, gamepad_state);
+      return;
+    }
+
+    auto vigem = raw->vigem;
 
     // If there is no gamepad support
     if (!vigem) {

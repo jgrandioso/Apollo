@@ -58,6 +58,22 @@ const config = ref(props.config)
       </div>
     </div>
 
+    <!-- Adaptive Bitrate -->
+    <Checkbox class="mb-3"
+              id="adaptive_bitrate"
+              locale-prefix="config"
+              v-model="config.adaptive_bitrate"
+              default="false"
+    ></Checkbox>
+
+    <!-- Adaptive Bitrate Floor -->
+    <div class="mb-3" v-if="config.adaptive_bitrate === 'enabled'">
+      <label for="adaptive_bitrate_floor_pct" class="form-label">{{ $t('config.adaptive_bitrate_floor_pct') }}</label>
+      <input type="number" min="10" max="100" class="form-control" id="adaptive_bitrate_floor_pct" placeholder="50"
+             v-model="config.adaptive_bitrate_floor_pct" />
+      <div class="form-text">{{ $t('config.adaptive_bitrate_floor_pct_desc') }}</div>
+    </div>
+
     <!-- Miscellaneous options -->
     <div class="mb-3 accordion">
       <div class="accordion-item">

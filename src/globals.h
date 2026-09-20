@@ -55,6 +55,7 @@ namespace mail {
   MAIL(invalidate_ref_frames);
   MAIL(gamepad_feedback);
   MAIL(hdr);
+  MAIL(bitrate_scale);  ///< Apollo extension: adaptive-bitrate multiplier updates (double, 0-1). See docs/dev/adaptive-bitrate-analysis.md.
 #undef MAIL
 
 }  // namespace mail
