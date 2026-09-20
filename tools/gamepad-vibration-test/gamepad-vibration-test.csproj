@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Standalone manual diagnostic tool, NOT part of the Apollo build or
+    install - nothing in CMakeLists.txt references this project, so it's
+    never built as part of a normal `cmake --build`. Run it directly with
+    `dotnet run` on the Windows machine you want to test a gamepad on.
+
+    Drives Windows.Gaming.Input.Gamepad directly (the same API real games
+    use for Xbox Series/Elite impulse trigger haptics) to cycle each of
+    the four vibration motors one at a time - main left, main right, left
+    trigger, right trigger - so you can confirm which physical motor
+    reacts to which without needing a specific game or the Xbox
+    Accessories app (which doesn't recognize third-party/virtual XInput
+    devices). Also useful for getting a real, non-all-zero
+    [diag] OutputReceived capture out of hidmaestro-bridge.exe, since a
+    game's rumble timing/values are hard to control precisely.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <RootNamespace>GamepadVibrationTest</RootNamespace>
+    <AssemblyName>gamepad-vibration-test</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>
