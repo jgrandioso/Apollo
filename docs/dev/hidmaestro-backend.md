@@ -4,6 +4,31 @@ Branch: `feature/hidmaestro-backend`. Lee primero
 `docs/dev/hidmaestro-backend-analysis.md` para el contexto completo de la
 investigación y las decisiones de arquitectura.
 
+## Actualización (2026-09-20): primer test en hardware real
+
+Confirmado por el usuario en Windows real, mando conectado, backend
+`hidmaestro` activo:
+
+1. **Los ejes verticales de ambos sticks salían invertidos.** Causa:
+   `NormalizeStick()` en `Program.cs` traducía linealmente el valor
+   crudo de Apollo (convención XInput, positivo = arriba) al rango
+   `[0..1]` que espera `HMGamepadStateHelpers.StandardAxes`, sin tener
+   en cuenta que el eje Y genérico de HID (lo que usa el perfil Xbox
+   Series X|S de HIDMaestro) sigue la convención contraria — igual que
+   DirectInput, positivo/mayor valor = abajo. Arreglado con
+   `NormalizeStickY()`, que invierte el resultado solo para los ejes Y
+   (los X no cambian, misma convención en ambos lados).
+2. **El rumble no llegaba en absoluto** — ni siquiera el motor principal
+   (no solo el de gatillos, que ya estaba marcado como sin verificar).
+   `HandleOutputReceived()` descarta silenciosamente cualquier paquete
+   que no tenga exactamente la forma que se supuso sin confirmar (13
+   bytes, `data[5] == 0x0F`) — si la forma real es distinta, nunca se
+   ve ni un solo evento de rumble, sin ningún rastro en el log. Añadido
+   logging incondicional del paquete crudo (vía el mecanismo de `error`
+   ya existente, prefijado `[diag]`) para poder ver la forma real la
+   próxima vez que se pruebe, y ajustar el parseo con datos reales en
+   vez de otra suposición. **Sigue sin arreglar** — solo instrumentado.
+
 ## Corrección importante (2026-09-16): el rumble de gatillos no está confirmado NI descartado
 
 Una versión anterior de este documento afirmaba, citando la investigación

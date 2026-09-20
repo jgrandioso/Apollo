@@ -26,6 +26,16 @@
 // been confirmed against this specific virtual profile. Check this first
 // if rumble/trigger-rumble events don't fire, or fire with garbled values,
 // on a real Windows test.
+//
+// UPDATE (real Windows test, 2026-09-20): no rumble at all was observed,
+// confirming the above guess needs verification - HandleOutputReceived()
+// now logs every OutputReceived packet unconditionally (via EmitError,
+// prefixed "[diag]") instead of only decoding ones matching the guessed
+// 13-byte shape, so the real layout can be captured and the parsing fixed
+// for real next time. Remove that logging once rumble is confirmed
+// working end to end. Same test also confirmed both sticks' vertical axes
+// were inverted - fixed (see NormalizeStickY below), unrelated to the
+// rumble byte-layout guess.
 
 using System.Text.Json.Nodes;
 using HIDMaestro;
@@ -177,6 +187,14 @@ internal static class Program
     /// </summary>
     private static void HandleOutputReceived(int id, HMOutputPacket packet)
     {
+        // Diagnostic-only: the 13-byte/data[5]==0x0F shape below is a guess
+        // (see the CONFIDENCE NOTE at the top of this file) that has never
+        // been checked against a real controller. Logging every packet
+        // unconditionally - not just ones that happen to match the guess -
+        // means a mismatch is visible in Apollo's log instead of silently
+        // dropping rumble with no trace at all.
+        EmitError($"[diag] OutputReceived source={packet.Source} len={packet.Data.Length} bytes={Convert.ToHexString(packet.Data.Span)}");
+
         if (packet.Source != HMOutputSource.XInput)
         {
             return;
@@ -254,9 +272,9 @@ internal static class Program
         var axes = HMGamepadStateHelpers.StandardAxes(
             controller.Profile,
             leftStickX: NormalizeStick(lsX),
-            leftStickY: NormalizeStick(lsY),
+            leftStickY: NormalizeStickY(lsY),
             rightStickX: NormalizeStick(rsX),
-            rightStickY: NormalizeStick(rsY),
+            rightStickY: NormalizeStickY(rsY),
             leftTrigger: NormalizeTrigger(lt),
             rightTrigger: NormalizeTrigger(rt)
         );
@@ -297,6 +315,16 @@ internal static class Program
 
     /// <summary>Apollo's signed 16-bit stick range to HIDMaestro's [0..1] (0.5 = center).</summary>
     private static float NormalizeStick(short raw) => (raw / 32768f + 1f) / 2f;
+
+    /// <summary>Same as <see cref="NormalizeStick"/> but flipped for the Y
+    /// axes specifically. Apollo's raw lsY/rsY follow XInput's sThumbLY/RY
+    /// convention (positive = stick pushed up). HIDMaestro's HMAxis.Y (and
+    /// whatever Y usage each stick's profile declares) is a generic HID
+    /// Y usage, which - unlike XInput - conventionally increases downward
+    /// (same as DirectInput/most raw joystick HID reports). Confirmed as
+    /// the actual root cause of both sticks appearing vertically inverted
+    /// in a real HIDMaestro test; see docs/dev/hidmaestro-backend.md.</summary>
+    private static float NormalizeStickY(short raw) => 1f - NormalizeStick(raw);
 
     /// <summary>Apollo's unsigned 8-bit trigger range to HIDMaestro's [0..1] (0 = released).</summary>
     private static float NormalizeTrigger(byte raw) => raw / 255f;
