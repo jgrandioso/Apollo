@@ -457,6 +457,8 @@
     "upnp_desc": "Automatically configure port forwarding for streaming over the Internet",
     "vaapi_strict_rc_buffer": "Strictly enforce frame bitrate limits for H.264/HEVC on AMD GPUs",
     "vaapi_strict_rc_buffer_desc": "Enabling this option can avoid dropped frames over the network during scene changes, but video quality may be reduced during motion.",
+    "virtual_display_duplicate_primary": "Duplicate Virtual Display with Primary Display",
+    "virtual_display_duplicate_primary_desc": "When a client uses the virtual display, put it in Windows duplicate/clone mode with the current primary display instead of adding it as a separate extended display, at the resolution the client requested. Mutually exclusive with the isolated display option below - enabling this disables that one.",
     "virtual_sink": "Virtual Sink",
     "virtual_sink_desc": "The audio device to be used when audio output isn't allowed on host by the client.\nIf unset, the device is chosen automatically.\nWe strongly recommend leaving this field blank to use automatic device selection!",
     "virtual_sink_placeholder": "Steam Streaming Speakers",

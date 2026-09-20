@@ -310,8 +310,18 @@ namespace proc {
             VDISPLAY::changeDisplaySettings(vdisplayName.c_str(), render_width, render_height, target_fps);
           }
 
-          // Check the ISOLATED DISPLAY configuration setting and rearrange the displays
-          if (config::video.isolated_virtual_display_option == true) {
+          // virtual_display_duplicate_primary and isolated_virtual_display_option
+          // are mutually exclusive by design (duplicate content vs. reposition as
+          // a non-overlapping extended display) - the Web UI already keeps only
+          // one checked at a time, but if both ended up true anyway (e.g. hand-
+          // edited config file), duplicate wins since it's this fork's new
+          // default behavior, with a log to flag the conflict.
+          if (config::video.virtual_display_duplicate_primary == true) {
+            if (config::video.isolated_virtual_display_option == true) {
+              BOOST_LOG(warning) << "virtual_display_duplicate_primary and isolated_virtual_display_option are both enabled; duplicate_primary takes priority.";
+            }
+            VDISPLAY::duplicateWithPrimaryDisplay(vdisplayName.c_str(), render_width, render_height, target_fps);
+          } else if (config::video.isolated_virtual_display_option == true) {
             // Apply the isolated display settings
             VDISPLAY::changeDisplaySettings2(vdisplayName.c_str(), render_width, render_height, target_fps, true);
           }

@@ -24,8 +24,14 @@ namespace VDISPLAY {
 
 	LONG getDeviceSettings(const wchar_t* deviceName, DEVMODEW& devMode);
 	LONG changeDisplaySettings(const wchar_t* deviceName, int width, int height, int refresh_rate);
-	LONG changeDisplaySettings2(const wchar_t* deviceName, int width, int height, int refresh_rate, bool bApplyIsolated=false);	
+	LONG changeDisplaySettings2(const wchar_t* deviceName, int width, int height, int refresh_rate, bool bApplyIsolated=false);
 	std::wstring getPrimaryDisplay();
+	// Apollo fork addition: puts deviceName (the just-created virtual display)
+	// into Windows duplicate/clone mode with the current primary display,
+	// instead of it staying a separate extended display. See
+	// docs/dev/virtual-display-duplicate-analysis.md for the mechanism and
+	// what's unverified. Returns a Win32 error code (ERROR_SUCCESS on success).
+	LONG duplicateWithPrimaryDisplay(const wchar_t* deviceName, int width, int height, int refresh_rate);
 	bool setPrimaryDisplay(const wchar_t* primaryDeviceName);
 	bool getDisplayHDRByName(const wchar_t* displayName);
 	bool setDisplayHDRByName(const wchar_t* displayName, bool enableAdvancedColor);

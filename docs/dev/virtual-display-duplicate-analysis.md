@@ -108,16 +108,21 @@ lo cual sería una feature bastante más grande.
   solapara son conceptualmente contradictorios) — a decidir antes de
   implementar.
 
-## Preguntas antes de diseñar en detalle
+## Decisión (2026-09-20)
 
-1. ¿Confirmas que quieres que se intente `SetDisplayConfig` con
-   resolución independiente por target primero, y si Windows lo rechaza,
-   caer a "misma resolución que la física" en vez de fallar del todo? ¿O
-   prefieres que si no se puede hacer con resolución independiente, se
-   quede sin activar (deshabilite el flag activamente) y avise por log?
-2. Sobre la interacción con `isolated_virtual_display_option`: ¿los
-   hacemos mutuamente excluyentes en la Web UI (si activas uno se
-   desactiva el otro), o simplemente documentamos que no tiene sentido
-   activarlos juntos y dejamos que el usuario decida?
+1. **Si Windows fuerza una resolución compartida en el grupo duplicado,
+   se mantiene la resolución del monitor virtual** (la que pidió el
+   cliente) — se ajustaría la física a esa, no al revés. Se intenta
+   primero con `SetDisplayConfig` normal (que en la práctica adopta la
+   resolución que se le pase en el `sourceMode` compartido); si
+   Windows lo rechaza igualmente, se loguea el fallo y no se activa el
+   duplicado para esa sesión (no se fuerza nada más agresivo).
+2. **Mutuamente excluyentes** con `isolated_virtual_display_option` en
+   la Web UI — activar uno desactiva el otro automáticamente en el
+   propio formulario (misma pareja de checkboxes, comportamiento tipo
+   radio). A nivel de C++, si por editar el fichero de config a mano
+   ambos quedan en `true`, `virtual_display_duplicate_primary` gana
+   (es el nuevo comportamiento por defecto) y se loguea un aviso del
+   conflicto.
 
-Con tus respuestas preparo el diseño concreto e implemento.
+Con esto, implementado en esta misma branch.
