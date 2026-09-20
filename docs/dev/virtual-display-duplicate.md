@@ -67,11 +67,33 @@ real de duplicado necesita CI/hardware Windows.
 
 Sin poder probarlo en Windows real, quedan sin confirmar:
 
-1. **Si Windows acepta una resolución independiente en el target
-   duplicado**, o si fuerza la misma resolución para todo el grupo
-   clonado (ver la incógnita documentada en el análisis). Si no lo
-   permite, el efecto observable sería que la pantalla física cambia de
-   resolución a la del cliente streaming — molesto pero no roto.
+1. **CONFIRMADO en hardware real (2026-09-20): Windows NO acepta una
+   resolución independiente en el target duplicado** — fuerza la misma
+   resolución para todo el grupo clonado, como se sospechaba. El efecto
+   observado: la pantalla física cambiaba a la resolución pedida por el
+   cliente (en la prueba del usuario, 1360x720) en cuanto arrancaba un
+   stream con este flag activo, y **se quedaba así indefinidamente**
+   después de terminar la sesión — porque `duplicateWithPrimaryDisplay()`
+   sobrescribe el `sourceMode` de la propia pantalla primaria (es el
+   mecanismo real de clonado de Windows: todo el grupo comparte una sola
+   superficie de origen), y el `terminate()` de `process.cpp` solo hacía
+   `removeVirtualDisplay()` + `display_device::reset_persistence()` — eso
+   destruye el display virtual, pero nunca tocaba de vuelta la resolución
+   de la primaria, porque ese código se escribió pensando en el modo
+   "isolated" (que nunca toca la primaria).
+
+   **Arreglado**: se captura la resolución/refresco original de la
+   primaria (`VDISPLAY::getDeviceSettings`) justo antes de llamar a
+   `duplicateWithPrimaryDisplay()`, guardada en nuevos campos de
+   `proc_t` (`duplicated_primary_display`,
+   `original_primary_{width,height,refresh_rate}`). En `terminate()`,
+   justo después de `removeVirtualDisplay()`, se restaura con la nueva
+   función `VDISPLAY::restorePrimaryDisplayMode()` (API DEVMODE simple,
+   sin volver a tocar la topología CCD — para cuando esto corre, el
+   display virtual ya no existe y la primaria vuelve a ser un path
+   normal). Sigue sin validar en Windows real que la restauración en sí
+   funcione correctamente, aunque el mecanismo (`ChangeDisplaySettingsExW`)
+   es el mismo que ya usa `changeDisplaySettings()` para el modo baseline.
 2. **Si dejar la entrada de `sourceMode` que antes usaba el monitor
    virtual, ahora sin ningún path que la referencie, en el array que se
    pasa a `SetDisplayConfig` es realmente inofensivo** — se asumió que sí

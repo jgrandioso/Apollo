@@ -448,6 +448,42 @@ LONG duplicateWithPrimaryDisplay(const wchar_t* deviceName, int width, int heigh
 	return status;
 }
 
+// Apollo fork addition: undoes the resolution change duplicateWithPrimaryDisplay()
+// made to the primary display. Deliberately uses the same plain DEVMODE API as
+// changeDisplaySettings()'s "baseline" step instead of redoing CCD path/mode
+// surgery - by the time this runs the virtual display has already been removed
+// (see proc_t teardown in process.cpp), so the primary is back to being a
+// normal single-path display and only its own resolution needs restoring.
+LONG restorePrimaryDisplayMode(const wchar_t* deviceName, int width, int height, int refresh_rate) {
+	DEVMODEW devMode = {};
+	devMode.dmSize = sizeof(devMode);
+
+	if (!EnumDisplaySettingsW(deviceName, ENUM_CURRENT_SETTINGS, &devMode)) {
+		wprintf(L"[SUDOVDA] Could not query current settings for %ls, skipping resolution restore.\n", deviceName);
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	if ((int) devMode.dmPelsWidth == width && (int) devMode.dmPelsHeight == height) {
+		// Already at the target resolution (e.g. it happened to match the
+		// client's, or nothing actually changed it) - nothing to do.
+		return ERROR_SUCCESS;
+	}
+
+	devMode.dmPelsWidth = width;
+	devMode.dmPelsHeight = height;
+	devMode.dmDisplayFrequency = refresh_rate;
+	devMode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
+
+	wprintf(L"[SUDOVDA] Restoring primary display %ls to [%dx%dx%d].\n", deviceName, width, height, refresh_rate);
+
+	LONG status = ChangeDisplaySettingsExW(deviceName, &devMode, NULL, CDS_UPDATEREGISTRY, NULL);
+	if (status != DISP_CHANGE_SUCCESSFUL) {
+		wprintf(L"[SUDOVDA] Failed to restore primary display resolution (error %ld).\n", status);
+	}
+
+	return status;
+}
+
 bool setPrimaryDisplay(const wchar_t* primaryDeviceName) {
 	DEVMODEW primaryDevMode{};
 	if (!getDeviceSettings(primaryDeviceName, primaryDevMode)) {

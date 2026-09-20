@@ -320,6 +320,23 @@ namespace proc {
             if (config::video.isolated_virtual_display_option == true) {
               BOOST_LOG(warning) << "virtual_display_duplicate_primary and isolated_virtual_display_option are both enabled; duplicate_primary takes priority.";
             }
+
+            // duplicateWithPrimaryDisplay() overwrites the primary's own
+            // resolution (Windows clone groups share one mode for the whole
+            // group) - capture it first so it can be restored when this
+            // session ends, otherwise the primary is left stuck at whatever
+            // resolution the client requested indefinitely.
+            std::wstring primaryDeviceName = VDISPLAY::getPrimaryDisplay();
+            if (!primaryDeviceName.empty()) {
+              DEVMODEW primaryDevMode {};
+              if (VDISPLAY::getDeviceSettings(primaryDeviceName.c_str(), primaryDevMode)) {
+                this->duplicated_primary_display = platf::to_utf8(primaryDeviceName);
+                this->original_primary_width = (int) primaryDevMode.dmPelsWidth;
+                this->original_primary_height = (int) primaryDevMode.dmPelsHeight;
+                this->original_primary_refresh_rate = (int) primaryDevMode.dmDisplayFrequency;
+              }
+            }
+
             VDISPLAY::duplicateWithPrimaryDisplay(vdisplayName.c_str(), render_width, render_height, target_fps);
           } else if (config::video.isolated_virtual_display_option == true) {
             // Apply the isolated display settings
@@ -775,6 +792,21 @@ namespace proc {
       } else {
         BOOST_LOG(warning) << "Virtual Display remove failed, but it seems it was not created correctly either.";
       }
+    }
+
+    // Restore the primary display's resolution if virtual_display_duplicate_primary
+    // changed it this session - removeVirtualDisplay() above only destroys the
+    // virtual target, it doesn't undo the resolution change made to the primary's
+    // own (shared, clone-group) source mode.
+    if (!duplicated_primary_display.empty()) {
+      auto primaryDisplayNameW = platf::from_utf8(duplicated_primary_display);
+      VDISPLAY::restorePrimaryDisplayMode(
+        primaryDisplayNameW.c_str(),
+        original_primary_width,
+        original_primary_height,
+        original_primary_refresh_rate
+      );
+      duplicated_primary_display.clear();
     }
 
     // Only show the Stopped notification if we actually have an app to stop

@@ -32,6 +32,12 @@ namespace VDISPLAY {
 	// docs/dev/virtual-display-duplicate-analysis.md for the mechanism and
 	// what's unverified. Returns a Win32 error code (ERROR_SUCCESS on success).
 	LONG duplicateWithPrimaryDisplay(const wchar_t* deviceName, int width, int height, int refresh_rate);
+	// Apollo fork addition: duplicateWithPrimaryDisplay() above overwrites the
+	// primary display's own source mode (Windows clone groups share one mode
+	// for every target), so the caller must capture the primary's mode before
+	// calling it and restore it with this function once the virtual display
+	// is torn down - nothing else puts the primary back afterward.
+	LONG restorePrimaryDisplayMode(const wchar_t* deviceName, int width, int height, int refresh_rate);
 	bool setPrimaryDisplay(const wchar_t* primaryDeviceName);
 	bool getDisplayHDRByName(const wchar_t* displayName);
 	bool setDisplayHDRByName(const wchar_t* displayName, bool enableAdvancedColor);
