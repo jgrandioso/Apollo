@@ -959,6 +959,47 @@ namespace platf {
     send_input(i);
   }
 
+  // Apollo fork addition: VK_TO_SCANCODE_MAP is a static table for the US
+  // layout (see keylayout.h) - correct for letters, navigation, and function
+  // keys, since their physical position is the same across virtually every
+  // layout. Wrong for punctuation/OEM keys and shifted digits (e.g. '@' vs
+  // '"'), whose PRODUCED CHARACTER genuinely differs by layout even though
+  // the physical position doesn't. Scoped narrowly to just these keys since
+  // games essentially never bind raw scancodes to symbol/digit+shift combos
+  // (see docs/dev/keyboard-symbol-layout.md for the reasoning and what's
+  // deliberately excluded).
+  bool is_symbol_or_digit_key(uint16_t vk) {
+    if (vk >= '0' && vk <= '9') {
+      return true;
+    }
+    switch (vk) {
+      case VK_OEM_1:
+      case VK_OEM_2:
+      case VK_OEM_3:
+      case VK_OEM_4:
+      case VK_OEM_5:
+      case VK_OEM_6:
+      case VK_OEM_7:
+      case VK_OEM_8:
+      case VK_OEM_102:
+      case VK_OEM_PLUS:
+      case VK_OEM_MINUS:
+      case VK_OEM_COMMA:
+      case VK_OEM_PERIOD:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // Apollo fork addition: true when the foreground window's active keyboard
+  // layout isn't US English, i.e. when VK_TO_SCANCODE_MAP's hardcoded
+  // assumption doesn't hold for this host.
+  bool host_layout_is_non_us() {
+    HKL active_layout = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), nullptr));
+    return LOWORD((ULONG_PTR) active_layout) != 0x0409 /* en-US */;
+  }
+
   void keyboard_update(input_t &input, uint16_t modcode, bool release, uint8_t flags) {
     INPUT i {};
     i.type = INPUT_KEYBOARD;
@@ -968,8 +1009,15 @@ namespace platf {
     // If we're set to always send scancodes, we will use the current keyboard layout to convert to a scancode. This will
     // assume the client and host have the same keyboard layout, but it's probably better than always using US English.
     if (!(flags & SS_KBE_FLAG_NON_NORMALIZED)) {
-      // Mask off the extended key byte
-      ki.wScan = VK_TO_SCANCODE_MAP[modcode & 0xFF];
+      // Apollo fork addition: for the narrow set of symbol/digit keys where the
+      // static US table produces the wrong character on a non-US host, leave
+      // ki.wScan at 0 so the fallthrough below sends a plain VK event instead -
+      // see is_symbol_or_digit_key() above. Everything else (letters,
+      // navigation, function keys) keeps using the table exactly as before.
+      if (!(is_symbol_or_digit_key(modcode) && host_layout_is_non_us())) {
+        // Mask off the extended key byte
+        ki.wScan = VK_TO_SCANCODE_MAP[modcode & 0xFF];
+      }
     } else if (config::input.always_send_scancodes && modcode != VK_LWIN && modcode != VK_RWIN && modcode != VK_PAUSE) {
       // For some reason, MapVirtualKey(VK_LWIN, MAPVK_VK_TO_VSC) doesn't seem to work :/
       ki.wScan = MapVirtualKey(modcode, MAPVK_VK_TO_VSC);
