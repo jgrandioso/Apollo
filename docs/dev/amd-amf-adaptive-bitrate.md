@@ -120,8 +120,12 @@ en `master`.
 
 ## Cómo activar/probar una vez en el host real (con GPU AMD)
 
-1. Igual que NVENC: Web UI → **Audio/Video** → activar **"Adaptive
+1. Web UI → pestaña **AMD AMF Encoder** → activar **"Adaptive
    Bitrate"**, ajustar **"Adaptive Bitrate Floor (%)"** si hace falta.
+   Es el mismo flag que usa NVENC (`adaptive_bitrate`/
+   `adaptive_bitrate_floor_pct`), expuesto por separado en la pestaña de
+   cada encoder desde el 2026-09-20 (antes vivía solo en la pestaña
+   NVIDIA NVENC Encoder, y los usuarios de AMD no lo veían en absoluto).
 2. Confirmar en el log que el encoder activo es `amdvce` (busca
    `Creating encoder [h264_amf]` o equivalente HEVC/AV1) — si el sistema
    cae a `software` por cualquier motivo, esta feature no hace nada (a

@@ -45,8 +45,13 @@ bitrate ya ajustado por Warp Mode).
 - Web UI (`NvidiaNvencEncoder.vue`), `config.html`, `en.json`,
   `configuration.md` — los dos flags expuestos y documentados. Viven en
   la pestaña propia del encoder NVIDIA NVENC, no en Audio/Video general,
-  ya que solo funcionan con ese encoder (2026-09-20, movidos de
-  `DisplayModesSettings.vue` tras confusión sobre dónde vivían).
+  ya que solo funcionan con encoders concretos (2026-09-20, movidos de
+  `DisplayModesSettings.vue` tras confusión sobre dónde vivían). Cuando
+  se añadió el soporte de AMD AMF (`amd-amf-adaptive-bitrate`) el mismo
+  flag pasó a usarlo también ese encoder, así que el checkbox se
+  duplicó en `AmdAmfEncoder.vue` también - mismo `v-model`, ambas
+  pestañas controlan el mismo valor de config (2026-09-20, se detectó
+  porque los usuarios de AMD no veían la opción en ningún sitio).
 
 Nada de esto toca la ruta de los encoders vía ffmpeg (software, VA-API,
 QuickSync, AMD AMF) — quedan sin esta feature en este MVP, tal como se
