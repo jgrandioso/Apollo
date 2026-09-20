@@ -1048,24 +1048,21 @@ namespace platf {
     // If we're set to always send scancodes, we will use the current keyboard layout to convert to a scancode. This will
     // assume the client and host have the same keyboard layout, but it's probably better than always using US English.
     if (!(flags & SS_KBE_FLAG_NON_NORMALIZED)) {
-      // Apollo fork addition: for the narrow set of symbol/digit keys where the
-      // static US table produces the wrong character on a non-US host, leave
-      // ki.wScan at 0 so the fallthrough below sends a plain VK event instead -
-      // see is_symbol_or_digit_key() above. Everything else (letters,
-      // navigation, function keys) keeps using the table exactly as before.
-      bool is_symbol = is_symbol_or_digit_key(modcode);
-      bool use_vk_event = is_symbol && host_layout_is_non_us();
-      // Diagnostic-only (debug log level): helps confirm whether this path is
-      // actually being taken for a given key, since it can't be exercised on
-      // Linux dev hardware. See docs/dev/keyboard-symbol-layout.md.
-      BOOST_LOG(debug) << "keyboard_update: modcode="sv << modcode
-                        << " normalized=true is_symbol_or_digit=" << is_symbol
-                        << " use_vk_event=" << use_vk_event
-                        << " -> " << (use_vk_event ? "VK event (layout-aware)"sv : "scancode (US table)"sv);
-      if (!use_vk_event) {
-        // Mask off the extended key byte
-        ki.wScan = VK_TO_SCANCODE_MAP[modcode & 0xFF];
-      }
+      // Apollo fork addition (2026-09-20, REVERTED same day): originally this
+      // branch also special-cased symbol/digit keys on non-US hosts to skip
+      // the scancode table, on the theory that VK_TO_SCANCODE_MAP's US-layout
+      // assumption made them wrong here too. That was never confirmed with
+      // real data (unlike the non-normalized fix below, which was) and a
+      // real Windows-to-Windows test showed it actively broke previously-
+      // working Spanish-layout keys (ñ, º, ¿, and the OEM cluster near ?/_/*)
+      // - scancode delivery is positional, so it already round-trips
+      // correctly when client and host share a layout, which a normalized
+      // same-OS-family client can be expected to do. Reverted to the
+      // original unconditional scancode-table behavior; see
+      // docs/dev/keyboard-symbol-layout.md for the full history.
+      BOOST_LOG(debug) << "keyboard_update: modcode="sv << modcode << " normalized=true -> scancode (US table)"sv;
+      // Mask off the extended key byte
+      ki.wScan = VK_TO_SCANCODE_MAP[modcode & 0xFF];
     } else {
       BOOST_LOG(debug) << "keyboard_update: modcode="sv << modcode
                         << " normalized=false always_send_scancodes=" << config::input.always_send_scancodes;

@@ -125,6 +125,32 @@ se ha confirmado para **un cliente** (Moonlight iOS) y **un carácter**
 los símbolos no identificables - es una inferencia a partir de un caso,
 no un contrato documentado del protocolo.
 
+## Segunda actualización (2026-09-20): el primer fix causaba una regresión real, revertido
+
+Con un cliente **Windows** (no el iPad), teclas españolas que antes
+funcionaban bien — `ñ`, `º`, `¿`, y el grupo OEM cerca de `?`/`_`/`*` —
+empezaron a reconocerse mal tras el primer fix (el de la rama
+"normalizada"). Revisando con más calma: ese primer fix nunca se validó
+con datos reales (a diferencia del segundo, confirmado con el log real
+del `@`) — era una teoría razonable pero sin confirmar de que
+`VK_TO_SCANCODE_MAP` también fallaba para claves normalizadas en host
+no-US.
+
+En realidad, para dos máquinas Windows con el mismo layout, la entrega
+por scancode **ya funciona correctamente sin necesidad de ningún fix**:
+el scancode es posicional (identifica la tecla física, no el carácter),
+así que si cliente y host comparten layout, el host resuelve el
+carácter correcto a partir de la posición física sin necesidad de
+ninguna suposición sobre US. El primer fix, al saltarse la tabla de
+scancodes para teclas de símbolo/dígito en host no-US, rompía
+precisamente ese caso que ya funcionaba.
+
+**Revertido** — la rama "normalizada" vuelve a su comportamiento
+original (siempre tabla de scancodes). El segundo fix (rama "no
+normalizada", inyección Unicode para `@` desde el iPad) se mantiene
+intacto, ya que toca una rama de código completamente distinta y sí
+está confirmado con datos reales.
+
 ## Qué NO se pudo validar aquí
 
 Todo esto es código exclusivo de Windows
