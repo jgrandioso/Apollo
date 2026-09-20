@@ -29,6 +29,37 @@ Confirmado por el usuario en Windows real, mando conectado, backend
    próxima vez que se pruebe, y ajustar el parseo con datos reales en
    vez de otra suposición. **Sigue sin arreglar** — solo instrumentado.
 
+## Actualización (2026-09-20): segundo test — causa real del rumble encontrada
+
+El logging de diagnóstico dio sus frutos: capturado un paquete real del
+test de vibración de Steam:
+
+```
+source=HidOutput len=7 bytes=00000000FF00EB
+```
+
+**La causa real era más simple de lo que parecía**: el código original
+solo aceptaba `HMOutputSource.XInput` y descartaba silenciosamente
+cualquier otra fuente — pero Steam manda el rumble como `HidOutput` (un
+report HID genérico), no como `XInputSetState`. Por eso nunca llegaba
+absolutamente nada, sin necesidad siquiera de que el formato de bytes
+importase.
+
+Arreglado: `HandleOutputReceived()` ahora maneja `HidOutput` (7 bytes,
+`[LT, RT, LM, RM, 0xFF, 0x00, 0xEB]` — la cola coincide exactamente con
+el layout de 13 bytes que se había supuesto antes, con la cabecera GIP
+recortada) y, por separado, `XInput` con el formato que la propia
+documentación del SDK indica textualmente (5 bytes: cmd + tamaño + motor
+bajo + motor alto + reservado), en vez de la suposición cruzada de otro
+proyecto que se usaba antes.
+
+**Sin confirmar todavía**: la muestra capturada era toda ceros
+(LT=RT=LM=RM=0), así que el ORDEN de esos 4 bytes dentro del payload de
+`HidOutput` es una inferencia razonada (coincide con el orden del layout
+de 13 bytes ya usado), no una confirmación — si el rumble llega pero al
+motor equivocado, hace falta una captura con valores distintos de cero
+para corregir el orden. El logging `[diag]` se mantiene por si acaso.
+
 ## Corrección importante (2026-09-16): el rumble de gatillos no está confirmado NI descartado
 
 Una versión anterior de este documento afirmaba, citando la investigación
