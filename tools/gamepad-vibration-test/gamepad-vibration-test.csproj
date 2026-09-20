@@ -3,7 +3,7 @@
   <!--
     Standalone manual diagnostic tool, NOT part of the Apollo build or
     install - nothing in CMakeLists.txt references this project, so it's
-    never built as part of a normal `cmake --build`. Run it directly with
+    never built as part of a normal `cmake build`. Run it directly with
     `dotnet run` on the Windows machine you want to test a gamepad on.
 
     Drives Windows.Gaming.Input.Gamepad directly (the same API real games
