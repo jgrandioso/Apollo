@@ -11,7 +11,9 @@
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
+#include <iterator>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 // lib includes
@@ -1000,10 +1002,47 @@ namespace platf {
     return LOWORD((ULONG_PTR) active_layout) != 0x0409 /* en-US */;
   }
 
+  // Apollo fork addition: interprets modcode as a keypress on a real US
+  // English layout, using whatever Shift/Ctrl/Alt are currently held (as
+  // far as GetKeyState reports - reflects Apollo's own prior synthesized
+  // presses), and returns the resulting character if there's exactly one.
+  // Loads the US layout via LoadKeyboardLayoutW rather than switching the
+  // active one, so this never touches what the user actually sees in the
+  // language bar. See docs/dev/keyboard-symbol-layout.md - known caveat:
+  // ToUnicodeEx has dead-key state side effects, not expected to matter
+  // for plain digit/OEM keys but unconfirmed on real hardware.
+  std::optional<wchar_t> resolve_char_via_us_layout(uint16_t modcode) {
+    static HKL us_layout = LoadKeyboardLayoutW(L"00000409", KLF_NOTELLSHELL | KLF_SUBSTITUTE_OK);
+    if (!us_layout) {
+      return std::nullopt;
+    }
+
+    BYTE key_state[256] = {};
+    if (GetKeyState(VK_SHIFT) & 0x8000) {
+      key_state[VK_SHIFT] = 0x80;
+    }
+    if (GetKeyState(VK_CONTROL) & 0x8000) {
+      key_state[VK_CONTROL] = 0x80;
+    }
+    if (GetKeyState(VK_MENU) & 0x8000) {
+      key_state[VK_MENU] = 0x80;
+    }
+
+    wchar_t buffer[8] = {};
+    UINT scancode = MapVirtualKeyExW(modcode, MAPVK_VK_TO_VSC, us_layout);
+    int result = ToUnicodeEx(modcode, scancode, key_state, buffer, std::size(buffer), 0, us_layout);
+
+    if (result == 1) {
+      return buffer[0];
+    }
+    return std::nullopt;
+  }
+
   void keyboard_update(input_t &input, uint16_t modcode, bool release, uint8_t flags) {
     INPUT i {};
     i.type = INPUT_KEYBOARD;
     auto &ki = i.ki;
+    bool unicode_injected = false;
 
     // If the client did not normalize this VK code to a US English layout, we can't accurately convert it to a scancode.
     // If we're set to always send scancodes, we will use the current keyboard layout to convert to a scancode. This will
@@ -1030,14 +1069,46 @@ namespace platf {
     } else {
       BOOST_LOG(debug) << "keyboard_update: modcode="sv << modcode
                         << " normalized=false always_send_scancodes=" << config::input.always_send_scancodes;
-      if (config::input.always_send_scancodes && modcode != VK_LWIN && modcode != VK_RWIN && modcode != VK_PAUSE) {
+
+      // Apollo fork addition: NON_NORMALIZED means "the client's best-effort,
+      // low-confidence guess" (see Limelight.h). Confirmed via real-world
+      // testing (Moonlight for iOS) that for symbols it can't cleanly
+      // identify, it sends the US-layout key/modifier combo that would
+      // produce the intended character (e.g. Shift+2 for '@') - which is
+      // wrong on a non-US host regardless of whether we deliver it as a
+      // scancode or a plain VK event, since both ultimately resolve through
+      // the host's real layout (Shift+2 on Spanish = '"', not '@'). Recover
+      // the intended character by interpreting modcode under a real US
+      // layout using whatever modifiers are currently held (the caller has
+      // already synthesized the client's requested modifiers by this
+      // point), then inject that exact character via Unicode instead -
+      // this sidesteps scancode/VK/host-layout resolution entirely, so it
+      // doesn't matter that the held modifiers don't match what the host's
+      // real layout would need for the same character. See
+      // docs/dev/keyboard-symbol-layout.md for the reasoning, confidence
+      // level, and what's unconfirmed (only tested against this one client
+      // and this one character).
+      if (is_symbol_or_digit_key(modcode) && host_layout_is_non_us()) {
+        if (auto resolved = resolve_char_via_us_layout(modcode)) {
+          ki.wScan = (WORD) *resolved;
+          ki.dwFlags = KEYEVENTF_UNICODE;
+          unicode_injected = true;
+          BOOST_LOG(debug) << "keyboard_update: resolved non-normalized modcode="sv << modcode
+                            << " to Unicode character "sv << (int) *resolved << " via US layout"sv;
+        }
+      }
+
+      if (!unicode_injected && config::input.always_send_scancodes && modcode != VK_LWIN && modcode != VK_RWIN && modcode != VK_PAUSE) {
         // For some reason, MapVirtualKey(VK_LWIN, MAPVK_VK_TO_VSC) doesn't seem to work :/
         ki.wScan = MapVirtualKey(modcode, MAPVK_VK_TO_VSC);
       }
     }
 
-    // If we can map this to a scancode, send it as a scancode for maximum game compatibility.
-    if (ki.wScan) {
+    if (unicode_injected) {
+      // Already fully set up above (KEYEVENTF_UNICODE) - skip the
+      // scancode/VK selection below entirely, it doesn't apply here.
+    } else if (ki.wScan) {
+      // If we can map this to a scancode, send it as a scancode for maximum game compatibility.
       ki.dwFlags = KEYEVENTF_SCANCODE;
     } else {
       // If there is no scancode mapping or it's non-normalized, send it as a regular VK event.
