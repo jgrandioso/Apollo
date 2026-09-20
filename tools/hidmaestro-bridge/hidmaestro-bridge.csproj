@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    HIDMaestro (https://github.com/hifihedgehog/HIDMaestro) has no NuGet feed
+    as of this writing - its own docs (hidmaestro.org/docs/start/installation/)
+    say to reference HIDMaestro.Core.dll directly from a release ZIP or a
+    from-source build. CMake (see ../../cmake/targets/windows.cmake) downloads
+    that release ZIP, locates HIDMaestro.Core.dll inside it (its exact path
+    inside the ZIP wasn't verified before writing this, so CMake searches for
+    it by filename rather than assuming a fixed layout), and passes the
+    resulting path in via this property - see
+    docs/dev/hidmaestro-backend-analysis.md for why.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <RootNamespace>ApolloHidMaestroBridge</RootNamespace>
+    <AssemblyName>hidmaestro-bridge</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Set by CMake via `dotnet publish -p:HIDMaestroCoreDllPath=...`. -->
+    <HIDMaestroCoreDllPath Condition="'$(HIDMaestroCoreDllPath)' == ''"></HIDMaestroCoreDllPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(HIDMaestroCoreDllPath)' != ''">
+    <Reference Include="HIDMaestro.Core">
+      <HintPath>$(HIDMaestroCoreDllPath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

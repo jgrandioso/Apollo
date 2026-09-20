@@ -21,6 +21,16 @@ const config = ref(props.config)
               default="true"
     ></Checkbox>
 
+    <!-- Gamepad Input Backend -->
+    <div class="mb-3" v-if="config.controller === 'enabled' && platform === 'windows'">
+      <label for="input_backend" class="form-label">{{ $t('config.input_backend') }}</label>
+      <select id="input_backend" class="form-select" v-model="config.input_backend">
+        <option value="vigem">{{ $t('config.input_backend_vigem') }}</option>
+        <option value="hidmaestro">{{ $t('config.input_backend_hidmaestro') }}</option>
+      </select>
+      <div class="form-text">{{ $t('config.input_backend_desc') }}</div>
+    </div>
+
     <!-- Emulated Gamepad Type -->
     <div class="mb-3" v-if="config.controller === 'enabled' && platform !== 'macos'">
       <label for="gamepad" class="form-label">{{ $t('config.gamepad') }}</label>
