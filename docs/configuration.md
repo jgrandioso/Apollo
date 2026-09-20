@@ -2175,6 +2175,66 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### frame_pacing_tolerance_pct
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Smooths out small timing hiccups between captured frames so the video encodes at
+            a steadier pace. Higher values tolerate more timing variation (smoother, but less
+            exact); lower values stick closer to the frame's real capture timing. This only
+            affects the timestamp used for encoding/pacing, not which frames are captured.
+            @note{This replaces what was previously a hardcoded 25% (1/4) tolerance. The
+            default value below reproduces the old behavior exactly.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            25
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">5-100</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            frame_pacing_tolerance_pct = 25
+            @endcode</td>
+    </tr>
+</table>
+
+### frame_pacing_smooth_bursts
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            When enabled, frames that encode quickly enough to send well within the ideal
+            frame interval have their network transmission spread across more of that
+            interval, instead of always sending as fast as the configured bandwidth ceiling
+            allows. This can reduce burstiness/jitter as seen by the client.
+            @note{Large frames (e.g. keyframes after a scene change) that need the full
+            bandwidth ceiling to fit within the frame interval are unaffected either way.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            frame_pacing_smooth_bursts = enabled
+            @endcode</td>
+    </tr>
+</table>
+
 ## NVIDIA NVENC Encoder
 
 ### nvenc_preset

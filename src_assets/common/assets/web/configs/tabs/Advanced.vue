@@ -135,6 +135,21 @@ const config = ref(props.config)
       <div class="form-text">{{ $t('config.encoder_desc') }}</div>
     </div>
 
+    <!-- Frame Pacing Tolerance -->
+    <div class="mb-3">
+      <label for="frame_pacing_tolerance_pct" class="form-label">{{ $t('config.frame_pacing_tolerance_pct') }}</label>
+      <input type="number" class="form-control" id="frame_pacing_tolerance_pct" placeholder="25" min="5" max="100" v-model="config.frame_pacing_tolerance_pct" />
+      <div class="form-text">{{ $t('config.frame_pacing_tolerance_pct_desc') }}</div>
+    </div>
+
+    <!-- Frame Pacing Smooth Bursts -->
+    <Checkbox class="mb-3"
+              id="frame_pacing_smooth_bursts"
+              locale-prefix="config"
+              v-model="config.frame_pacing_smooth_bursts"
+              default="false"
+    ></Checkbox>
+
   </div>
 </template>
 

@@ -1480,12 +1480,26 @@ namespace stream {
 
     auto ratecontrol_next_frame_start = std::chrono::steady_clock::now();
 
+    // Used by frame_pacing_smooth_bursts (see below) to measure the real gap between
+    // consecutive frames' capture timestamps, reusing the cadence that video.cpp's
+    // encode_run() already snaps to a regular grid (see frame_pacing_tolerance_pct).
+    std::optional<std::chrono::steady_clock::time_point> previous_frame_timestamp;
+
+    // Diagnostic-only: logs the measured ideal frame interval and whether burst smoothing
+    // was actually applied. Not a user-facing feature, only visible at debug/verbose log
+    // levels.
+    logging::min_max_avg_periodic_logger<double> network_pacing_interval_logger(debug, "Frame pacing: network ideal interval", "ms");
+
     while (auto packet = packets->pop()) {
       if (shutdown_event->peek()) {
         break;
       }
 
       frame_network_latency_logger.first_point_now();
+
+      // Populated below, from packet->frame_timestamp, only when frame_pacing_smooth_bursts
+      // is meaningful for this packet (i.e. it's not a synthetic duplicate-frame timestamp).
+      std::optional<std::chrono::steady_clock::duration> measured_ideal_interval;
 
       auto session = (session_t *) packet->channel_data;
       auto lowseq = session->video.lowseq;
@@ -1526,6 +1540,18 @@ namespace stream {
         uint16_t latency = duration_to_latency(std::chrono::steady_clock::now() - *packet->frame_timestamp);
         frame_header.frame_processing_latency = latency;
         frame_processing_latency_logger.collect_and_log(latency / 10.);
+
+        // Measure the real gap between this frame's capture timestamp and the previous
+        // one's, for frame_pacing_smooth_bursts below. Sanity-bounded to [1ms, 200ms] so a
+        // stream stall/restart (huge gap) or a clock artifact (near-zero/negative) doesn't
+        // produce a nonsensical pacing target.
+        if (previous_frame_timestamp) {
+          auto interval = *packet->frame_timestamp - *previous_frame_timestamp;
+          if (interval >= 1ms && interval <= 200ms) {
+            measured_ideal_interval = interval;
+          }
+        }
+        previous_frame_timestamp = packet->frame_timestamp;
       } else {
         frame_header.frame_processing_latency = 0;
       }
@@ -1594,6 +1620,24 @@ namespace stream {
       try {
         // Use around 80% of 1Gbps          1Gbps            percent    ms     packet      byte
         size_t ratecontrol_packets_in_1ms = std::giga::num * 80 / 100 / 1000 / blocksize / 8;
+
+        // frame_pacing_smooth_bursts: when a frame is small enough to finish sending well
+        // within the measured ideal frame interval, spread its packets across ~90% of that
+        // interval instead of always blasting at the flat network-capacity ceiling above.
+        // This reduces burstiness/jitter for the receiver without ever pacing slower than
+        // what's needed to finish in time - for frames too large to fit even at the flat
+        // ceiling (e.g. a keyframe after a scene change), this has no effect and behaves
+        // exactly like the ceiling-only rate above.
+        if (config::video.frame_pacing_smooth_bursts && measured_ideal_interval) {
+          auto total_payload_packets_estimate = (payload.size() + blocksize - 1) / blocksize;
+          auto total_packets_with_fec_estimate = total_payload_packets_estimate * (100 + fecPercentage) / 100;
+          double ideal_interval_ms = std::chrono::duration<double, std::milli>(*measured_ideal_interval).count();
+          network_pacing_interval_logger.collect_and_log(ideal_interval_ms);
+
+          double min_rate_for_interval = total_packets_with_fec_estimate / (ideal_interval_ms * 0.9);
+          size_t smoothed_packets_in_1ms = std::max<size_t>(1, (size_t) std::ceil(min_rate_for_interval));
+          ratecontrol_packets_in_1ms = std::min(ratecontrol_packets_in_1ms, smoothed_packets_in_1ms);
+        }
 
         // Send less than 64K in a single batch.
         // On Windows, batches above 64K seem to bypass SO_SNDBUF regardless of its size,

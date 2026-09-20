@@ -515,6 +515,8 @@ namespace config {
 
     false,  // adaptive_bitrate
     50,  // adaptive_bitrate_floor_pct
+    25.0,  // frame_pacing_tolerance_pct (matches previous hardcoded 1/4)
+    false,  // frame_pacing_smooth_bursts
 
     "1920x1080x60",  // fallback_mode
     false, // isolated Display
@@ -1211,6 +1213,8 @@ namespace config {
 
     bool_f(vars, "adaptive_bitrate", video.adaptive_bitrate);
     int_between_f(vars, "adaptive_bitrate_floor_pct", video.adaptive_bitrate_floor_pct, {10, 100});
+    double_between_f(vars, "frame_pacing_tolerance_pct", video.frame_pacing_tolerance_pct, {5.0, 100.0});
+    bool_f(vars, "frame_pacing_smooth_bursts", video.frame_pacing_smooth_bursts);
 
     string_f(vars, "fallback_mode", video.fallback_mode);
     bool_f(vars, "isolated_virtual_display_option", video.isolated_virtual_display_option);

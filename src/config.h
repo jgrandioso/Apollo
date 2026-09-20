@@ -148,6 +148,8 @@ namespace config {
 
     bool adaptive_bitrate;  ///< Apollo extension: react to client-reported packet loss by scaling the encoder bitrate down (NVENC only). Default off, zero behavior change.
     int adaptive_bitrate_floor_pct;  ///< Never scale the (Warp Mode-adjusted) bitrate below this percent of its original value. Range 10-100.
+    double frame_pacing_tolerance_pct;  ///< Percent of the ideal encode interval used as the frame-timestamp snapping tolerance. Range 5-100, default 25 (matches the previous hardcoded 1/4 behavior).
+    bool frame_pacing_smooth_bursts;  ///< When enabled, spreads network transmission of frames that finish early across more of the ideal frame interval instead of always sending at the flat bandwidth ceiling.
 
     std::string fallback_mode;
     bool isolated_virtual_display_option;
