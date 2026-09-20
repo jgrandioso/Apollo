@@ -5,13 +5,25 @@ Este archivo documenta los cambios propios de este fork personal de
 changelog del proyecto original (`docs/changelog.md`), que sigue
 reflejando los cambios de LizardByte/ClassicOldSong.
 
-**Importante sobre el estado de estos cambios**: cada feature vive en su
-propio branch, partiendo de `master` en el commit `db2e4199`. Nada de esto
-está fusionado en `master` todavía — este changelog describe qué hay en
-cada branch, no qué hay "publicado". Ver `README-fork.md` para el estado
-de cada uno.
+**Importante sobre el estado de estos cambios**: cada feature nació en su
+propio branch, partiendo de `master` en el commit `db2e4199`. A partir de
+la versión **1.1.0**, todas las features listadas abajo ya están
+fusionadas en `master` — las secciones por branch se conservan porque
+tienen el detalle técnico y las notas de validación de cada una, pero ya
+no representan código "sin publicar". Ver `README-fork.md` para el
+estado general del fork.
 
 ## `master`
+
+### 1.1.0 — Añadido
+- **Fusión completa de `feature/all-in-one-testing`** — el resto de
+  features de este fork (listadas abajo con su propia sección, con el
+  detalle técnico completo) pasan a estar en `master`: backend de mando
+  HIDMaestro, bitrate adaptativo en caliente (NVENC y AMD AMF), AMD AMF
+  High Motion Quality Boost, y monitor virtual duplicado con la pantalla
+  primaria (`virtual_display_duplicate_primary`). Confirmadas
+  funcionales por el usuario en hardware real antes de fusionar — ver la
+  sección de cada una para el detalle de qué se validó específicamente.
 
 ### Corregido
 - **Pipeline de build en Linux (`docker/debian-trixie.dockerfile`)**: 4
@@ -83,7 +95,7 @@ de cada uno.
   local. Recuperados y adaptados de los workflows originales de Apollo
   (borrados en algún punto del historial de upstream).
 
-## `feature/frame-pacing`
+## `feature/frame-pacing` (mergeado en `master`, 1.0.0)
 
 ### Añadido
 - `frame_pacing_tolerance_pct` (Web UI: Advanced) — hace configurable la
@@ -108,9 +120,9 @@ real). Detalle: `docs/dev/frame-pacing.md`.
   activo. Sin código nuevo — solo el análisis queda documentado en
   `docs/dev/bandwidth-budget-analysis.md`.
 
-## `feature/hidmaestro-backend`
+## `feature/hidmaestro-backend` (mergeado en `master`, 1.1.0)
 
-### Añadido (experimental, no verificado de extremo a extremo)
+### Añadido
 - `input_backend` (Web UI: Input) — backend de mando alternativo vía
   [HIDMaestro](https://github.com/hifihedgehog/HIDMaestro), emulando un
   Xbox Series X|S con soporte de rumble de gatillos que ViGEmBus no
@@ -120,15 +132,14 @@ real). Detalle: `docs/dev/frame-pacing.md`.
   stdin/stdout. Build detrás de `-DSUNSHINE_ENABLE_HIDMAESTRO=ON` (OFF
   por defecto).
 
-**Estado**: nada de este código se pudo compilar ni ejecutar en este
-entorno (Windows-only, necesita .NET 10 SDK + Visual Studio). Si el
-rumble de gatillos llega de verdad vía Windows.Gaming.Input/GameInput
-sigue **sin resolver** tras una investigación considerable — ver el aviso
-al principio de `docs/dev/hidmaestro-backend.md` para la historia
-completa (incluye dos correcciones de rumbo importantes durante el
-desarrollo).
+**Estado**: no se pudo compilar ni ejecutar en el entorno de desarrollo
+Linux (Windows-only, necesita .NET 10 SDK + Visual Studio) — compilado y
+validado en CI de Windows, y confirmado funcional por el usuario en
+hardware real antes de fusionar a `master`. Ver el aviso al principio de
+`docs/dev/hidmaestro-backend.md` para la historia completa del
+desarrollo (incluye dos correcciones de rumbo importantes).
 
-## `feature/adaptive-bitrate`
+## `feature/adaptive-bitrate` (mergeado en `master`, 1.1.0)
 
 ### Añadido
 - `adaptive_bitrate` y `adaptive_bitrate_floor_pct` (Web UI: Audio/Video)
@@ -144,8 +155,10 @@ desarrollo).
 
 **Estado**: compila limpio en Linux (NVENC es multiplataforma vía CUDA).
 El algoritmo de decisión se validó de forma aislada con escenarios
-sintéticos de pérdida. `NvEncReconfigureEncoder` en sí no se ha podido
-ejecutar (necesita GPU NVIDIA real). Detalle: `docs/dev/adaptive-bitrate.md`.
+sintéticos de pérdida. Confirmado funcional por el usuario en hardware
+real (GPU NVIDIA) antes de fusionar a `master`. El toggle vive en la
+pestaña propia del encoder NVIDIA NVENC (no en Audio/Video general).
+Detalle: `docs/dev/adaptive-bitrate.md`.
 
 ### Documentado (retomado en `feature/amd-amf-adaptive-bitrate`, ver abajo)
 - Investigación original de por qué esto no se pudo hacer también para
@@ -155,7 +168,7 @@ ejecutar (necesita GPU NVIDIA real). Detalle: `docs/dev/adaptive-bitrate.md`.
   histórico — confirmó que el bitrate de AMF **sí es una propiedad
   dinámica de verdad**, lo que hizo viable la branch de abajo.
 
-## `feature/amd-amf-adaptive-bitrate`
+## `feature/amd-amf-adaptive-bitrate` (mergeado en `master`, 1.1.0)
 
 ### Añadido
 - Bitrate adaptativo también para AMD AMF (H.264/HEVC/AV1), reutilizando
@@ -191,11 +204,13 @@ simulado). El parche de ffmpeg aplica limpio, verificado con `git apply
 --check`. Durante la validación se encontró y arregló un choque de
 cabeceras (`ffnvcodec/nvEncodeAPI.h`) que rompía la compilación nativa de
 NVENC de Apollo — aislado con una prueba de control antes de arreglarlo.
-Ejecución real sobre GPU AMD (`SetProperty` en una sesión AMF activa)
-sigue sin confirmarse — necesita hardware Windows real. Detalle:
+Confirmado funcional por el usuario en hardware AMD real antes de
+fusionar a `master`. El toggle vive tanto en la pestaña del encoder
+NVIDIA NVENC como en la de AMD AMF Encoder (mismo valor de config,
+compartido entre ambos encoders). Detalle:
 `docs/dev/amd-amf-adaptive-bitrate.md`.
 
-## `feature/amd-high-motion-quality-boost`
+## `feature/amd-high-motion-quality-boost` (mergeado en `master`, 1.0.0)
 
 ### Añadido
 - `amd_high_motion_quality_boost` (Web UI: pestaña "AMD AMF Encoder") —
@@ -206,6 +221,42 @@ sigue sin confirmarse — necesita hardware Windows real. Detalle:
   expuesta en Apollo. Sin valor por defecto forzado.
 
 **Estado**: solo la parte multiplataforma (`config.h`/`config.cpp`) se
-pudo compilar aquí — el mapeo real en `src/video.cpp` está dentro de un
-`#ifdef _WIN32` (igual que HIDMaestro), sin compilar ni probar en este
-entorno. Detalle: `docs/dev/amd-high-motion-quality-boost.md`.
+pudo compilar en el entorno de desarrollo Linux — el mapeo real en
+`src/video.cpp` está dentro de un `#ifdef _WIN32` (igual que HIDMaestro).
+Compilado en CI de Windows real. Detalle:
+`docs/dev/amd-high-motion-quality-boost.md`.
+
+## `feature/virtual-display-duplicate` (mergeado en `master`, 1.1.0)
+
+### Añadido
+- `virtual_display_duplicate_primary` (Web UI: Audio/Video) — pone el
+  monitor virtual que Apollo crea para cada cliente en modo
+  duplicado/clonado con la pantalla física primaria, en vez de añadirlo
+  siempre como pantalla extendida independiente (comportamiento
+  anterior). **Activado por defecto**, a diferencia de toda otra feature
+  de este fork — mutuamente excluyente con `isolated_virtual_display_option`
+  ya existente (activar uno desactiva el otro, tanto en la Web UI como
+  en tiempo de ejecución).
+- `VDISPLAY::duplicateWithPrimaryDisplay()` — usa la misma API real de
+  Windows CCD (`QueryDisplayConfig`/`SetDisplayConfig`) que ya usa
+  `changeDisplaySettings2` en el mismo fichero, reasignando el
+  `sourceInfo` del monitor virtual al de la pantalla primaria — así es
+  como Windows representa un grupo de pantallas clonadas.
+
+### Corregido
+- **La resolución del monitor virtual se quedaba pegada a la primaria
+  para siempre**: activar el modo duplicado cambia la resolución
+  compartida del grupo clonado (así funciona un clone group de Windows
+  — una sola superficie de origen para todo el grupo), pero nada
+  restauraba la resolución original de la pantalla primaria al terminar
+  la sesión — el código de limpieza (`terminate()`) se escribió pensando
+  en el modo "isolated" anterior, que nunca tocaba la primaria.
+  Arreglado capturando la resolución/refresco original antes de activar
+  el modo duplicado y restaurándolo explícitamente al terminar la
+  sesión (`VDISPLAY::restorePrimaryDisplayMode()`).
+
+**Estado**: código exclusivo de Windows (`src/platform/windows/`), solo
+se pudo compilar la parte multiplataforma en este entorno. Compilado en
+CI de Windows real, incluido el fix de restauración de resolución.
+Confirmado funcional por el usuario en hardware real antes de fusionar
+a `master`. Detalle: `docs/dev/virtual-display-duplicate.md`.

@@ -12,7 +12,7 @@ cmake_minimum_required(VERSION 3.20)
 # marks this as this fork's own first real version, not a dev/git-describe
 # fallback, and is high enough to never collide with upstream's still-alpha
 # 0.4.x numbering.
-project(Apollo VERSION 1.0.1
+project(Apollo VERSION 1.1.0
         DESCRIPTION "Self-hosted game stream host for Artemis (jgrandioso's personal fork)"
         HOMEPAGE_URL "https://github.com/jgrandioso/Apollo")
 
