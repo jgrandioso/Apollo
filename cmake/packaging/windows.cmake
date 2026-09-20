@@ -38,6 +38,35 @@ install(DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/drivers/sudovda"
         DESTINATION "drivers"
         COMPONENT sudovda)
 
+# drivers/sudovda/install.bat calls nefconc.exe (--create-device-node,
+# --install-driver, etc.) to actually create the SudoVDA display device
+# node, but neither this repo nor upstream ClassicOldSong/Apollo nor the
+# SudoVDA driver's own repo ever bundles that binary anywhere - confirmed
+# by searching all three. Without it, install.bat's device-node-creation
+# step silently does nothing (the shell just reports "not recognized"),
+# SudoVDA never appears in Device Manager at all, and Apollo's Web UI
+# shows "Driver status: Uninitialized" forever - this is a widely
+# reported upstream issue (ClassicOldSong/Apollo#1044, #1360) with the
+# actual root cause never identified in either thread. nefconc.exe is a
+# separate open-source tool (github.com/nefarius/nefcon, same author as
+# ViGEmBus above) - fetched here the same way, pinned version + hash.
+set(NEFCON_RELEASE_ZIP "${CMAKE_BINARY_DIR}/nefcon_v1.20.0.zip")
+set(NEFCON_EXTRACT_DIR "${CMAKE_BINARY_DIR}/nefcon-release")
+file(DOWNLOAD
+        "https://github.com/nefarius/nefcon/releases/download/v1.20.0/nefcon_v1.20.0.zip"
+        "${NEFCON_RELEASE_ZIP}"
+        SHOW_PROGRESS
+        EXPECTED_HASH SHA256=be50bf5d66556a5577e1be1cb3c36ea6d0462d558ea8c2b3b8934e8f88ec433a
+        TIMEOUT 60
+)
+file(ARCHIVE_EXTRACT
+        INPUT "${NEFCON_RELEASE_ZIP}"
+        DESTINATION "${NEFCON_EXTRACT_DIR}"
+)
+install(FILES "${NEFCON_EXTRACT_DIR}/x64/nefconc.exe"
+        DESTINATION "drivers/sudovda"
+        COMPONENT sudovda)
+
 # Mandatory scripts
 install(DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/misc/service/"
         DESTINATION "scripts"
