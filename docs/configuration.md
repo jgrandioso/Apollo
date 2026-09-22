@@ -1123,7 +1123,7 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
     <tr>
         <td>Default</td>
-        <td colspan="2">@code{}enabled@endcode</td>
+        <td colspan="2">@code{}disabled@endcode</td>
     </tr>
     <tr>
         <th>Value</th>
@@ -1135,7 +1135,7 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
     <tr>
         <td>enabled</td>
-        <td>Duplicate the virtual display with the primary display, at the client's requested resolution</td>
+        <td>Duplicate the virtual display with the primary display, at the client's requested resolution. @note{Confirmed on real hardware (2026-09-21) to cause a duplicated/ghosted cursor for a second client resuming the session, specific to the first client's requested resolution - use with caution until this is better understood.}</td>
     </tr>
 </table>
 

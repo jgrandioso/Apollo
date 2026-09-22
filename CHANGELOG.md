@@ -15,6 +15,16 @@ estado general del fork.
 
 ## `master`
 
+### 2026-09-21 — Corregido
+- **`virtual_display_duplicate_primary` vuelto a desactivado por
+  defecto**: confirmado en hardware real un bug de cursor
+  duplicado/fantasma cuando un segundo cliente distinto reanuda una
+  sesión que otro cliente inició con este modo activo, específico de la
+  resolución que pidió el primer cliente. Causa raíz sin confirmar
+  (sospecha: el cambio de resolución en crudo vía `SetDisplayConfig` no
+  resetea el estado del overlay de cursor por hardware). Detalle en
+  `docs/dev/virtual-display-duplicate.md`.
+
 ### 1.1.0 — Añadido
 - **Fusión completa de `feature/all-in-one-testing`** — el resto de
   features de este fork (listadas abajo con su propia sección, con el
@@ -238,10 +248,12 @@ Compilado en CI de Windows real. Detalle:
   monitor virtual que Apollo crea para cada cliente en modo
   duplicado/clonado con la pantalla física primaria, en vez de añadirlo
   siempre como pantalla extendida independiente (comportamiento
-  anterior). **Activado por defecto**, a diferencia de toda otra feature
-  de este fork — mutuamente excluyente con `isolated_virtual_display_option`
-  ya existente (activar uno desactiva el otro, tanto en la Web UI como
-  en tiempo de ejecución).
+  anterior). **Desactivado por defecto** — empezó activado por defecto,
+  pero se revirtió (2026-09-21) tras confirmarse en hardware real un bug
+  de cursor duplicado/fantasma al reanudar la sesión desde un segundo
+  cliente distinto al que la inició. Mutuamente excluyente con
+  `isolated_virtual_display_option` ya existente (activar uno desactiva
+  el otro, tanto en la Web UI como en tiempo de ejecución).
 - `VDISPLAY::duplicateWithPrimaryDisplay()` — usa la misma API real de
   Windows CCD (`QueryDisplayConfig`/`SetDisplayConfig`) que ya usa
   `changeDisplaySettings2` en el mismo fichero, reasignando el

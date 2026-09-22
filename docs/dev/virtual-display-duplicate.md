@@ -10,16 +10,21 @@ Hasta ahora, cada vez que Apollo crea un monitor virtual para un
 cliente, se añade siempre como pantalla **extendida** independiente —
 nunca hay forma de que el propio host vea en su pantalla física lo mismo
 que se está transmitiendo. Esta feature pone el monitor virtual en modo
-**duplicado/clonado** con la pantalla primaria por defecto, a la
-resolución que pida el cliente (no la de la física).
+**duplicado/clonado** con la pantalla primaria, a la resolución que pida
+el cliente (no la de la física).
 
-Nuevo flag: `virtual_display_duplicate_primary` (Web UI: Audio/Video),
-**default activado** — a diferencia de toda otra feature de este fork,
-que son opt-in. Mutuamente excluyente con
-`isolated_virtual_display_option` (ya existente): activar uno desactiva
-el otro, tanto en la Web UI (checkboxes enlazados) como en tiempo de
-ejecución si se edita el config a mano (gana `virtual_display_duplicate_primary`,
-con aviso en el log).
+Nuevo flag: `virtual_display_duplicate_primary` (Web UI: Audio/Video).
+Mutuamente excluyente con `isolated_virtual_display_option` (ya
+existente): activar uno desactiva el otro, tanto en la Web UI (checkboxes
+enlazados) como en tiempo de ejecución si se edita el config a mano (gana
+`virtual_display_duplicate_primary`, con aviso en el log).
+
+**Actualización (2026-09-21)**: empezó con `default activado` (única
+feature de este fork que rompía el patrón opt-in), pero se revirtió a
+**desactivado por defecto** tras confirmarse en hardware real un bug de
+cursor duplicado/fantasma al reanudar la sesión desde un segundo cliente
+distinto — ver la sección "Qué NO se pudo validar aquí" más abajo, ahora
+con el hallazgo real documentado.
 
 ## Diff conceptual: modificado vs. nuevo
 
@@ -98,6 +103,25 @@ Sin poder probarlo en Windows real, quedan sin confirmar:
    virtual, ahora sin ningún path que la referencie, en el array que se
    pasa a `SetDisplayConfig` es realmente inofensivo** — se asumió que sí
    (comentado explícitamente en el código), pero no está confirmado.
+   **Posible pista (2026-09-21)**: el bug de cursor duplicado/fantasma de
+   abajo podría estar relacionado con esto — si Windows mantiene un
+   overlay de cursor por hardware independiente para esa entrada
+   "huérfana", eso explicaría un segundo cursor visible sin limpiar. No
+   confirmado, solo una hipótesis razonada.
+2b. **CONFIRMADO en hardware real (2026-09-21): cursor duplicado/fantasma
+   al reanudar la sesión desde un segundo cliente distinto.** Escenario
+   reproducido por el usuario: el iPad lanza una app (arranca el modo
+   duplicado a la resolución que pide el iPad), luego el PC se conecta y
+   "retoma" la misma sesión (sin que el iPad esté activamente resumed) —
+   en el PC aparece un cursor duplicado/con rastro, específicamente
+   ligado a la resolución que pidió el iPad (con otras resoluciones no se
+   nota, o no se ha probado). Causa raíz sin confirmar — la teoría más
+   plausible es que el cambio de resolución en crudo vía
+   `SetDisplayConfig` no resetea correctamente el estado del overlay de
+   cursor por hardware que estaba calibrado para la resolución anterior.
+   **Por esto se revirtió el flag a desactivado por defecto** (ver
+   arriba) — no se ha intentado arreglar el mecanismo en sí, requiere
+   poder iterar en Windows real.
 3. **El comportamiento real de principio a fin**: que el monitor virtual
    aparezca de verdad duplicado (no como una tercera pantalla más), que
    el toggle de la Web UI realmente alterne el comportamiento sin

@@ -523,7 +523,7 @@ namespace config {
     false, // isolated Display
     false, // ignore_encoder_probe_failure
 
-    true,  // virtual_display_duplicate_primary
+    false,  // virtual_display_duplicate_primary
   };
 
   audio_t audio {

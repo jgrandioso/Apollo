@@ -189,7 +189,7 @@ const validateFallbackMode = (event) => {
               id="virtual_display_duplicate_primary"
               locale-prefix="config"
               v-model="duplicatePrimary"
-              default="true"
+              default="false"
               v-if="platform === 'windows'"
     ></Checkbox>
 
